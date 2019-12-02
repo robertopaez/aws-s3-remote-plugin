@@ -1,32 +1,36 @@
 package com.rundeck.plugin.aws.commands.s3
 
-import com.amazonaws.AmazonServiceException
-import com.amazonaws.services.s3.AmazonS3
-import com.amazonaws.services.s3.model.AmazonS3Exception
-import com.amazonaws.services.s3.model.Bucket
-import com.amazonaws.services.s3.model.ListObjectsV2Request
-import com.amazonaws.services.s3.model.ListObjectsV2Result
-import com.amazonaws.services.s3.model.ListVersionsRequest
-import com.amazonaws.services.s3.model.ObjectListing
-import com.amazonaws.services.s3.model.S3ObjectSummary
-import com.amazonaws.services.s3.model.S3VersionSummary
-import com.amazonaws.services.s3.model.VersionListing
+import com.rundeck.plugin.aws.commands.s3.model.FileOps
+import com.rundeck.plugin.aws.commands.s3.model.FileOpsBuilder
+import com.rundeck.plugin.aws.commands.s3.model.FileSystemOps
+import com.rundeck.plugin.aws.commands.s3.model.FileTransferData
+import com.rundeck.plugin.aws.commands.s3.model.S3Ops
 import com.rundeck.plugin.aws.options.s3.S3CopyOptions
 import com.rundeck.plugin.aws.options.s3.S3DeleteBucketOptions
 import com.rundeck.plugin.aws.options.s3.S3ListOptions
+import com.rundeck.plugin.aws.options.s3.S3SyncOptions
 import com.rundeck.plugin.aws.util.AwsPluginUtil
 import com.rundeck.plugin.aws.util.AwsS3Builder
 import org.rundeck.toolbelt.Command
 import org.rundeck.toolbelt.CommandOutput
-
-import java.nio.file.Files
-import java.nio.file.Paths
+import software.amazon.awssdk.regions.Region
+import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.model.CopyObjectRequest
+import software.amazon.awssdk.services.s3.model.CreateBucketConfiguration
+import software.amazon.awssdk.services.s3.model.CreateBucketRequest
+import software.amazon.awssdk.services.s3.model.CreateBucketResponse
+import software.amazon.awssdk.services.s3.model.DeleteBucketRequest
+import software.amazon.awssdk.services.s3.model.GetObjectRequest
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Request
+import software.amazon.awssdk.services.s3.model.ListObjectsV2Response
+import software.amazon.awssdk.services.s3.paginators.ListObjectsV2Iterable
 import java.text.DateFormat
 import java.text.SimpleDateFormat
 
 @Command(description = "S3 commands" , synonyms = "s3")
 class S3Command {
 
+    static String FILE_DELIMITER="/"
 
     @Command(synonyms = "ls", description = "List objects from a bucket")
     void list(S3ListOptions options, CommandOutput output){
@@ -35,70 +39,69 @@ class S3Command {
         def secretKey = AwsPluginUtil.parseConfig(options.secretKey)
         def endpoint = AwsPluginUtil.parseConfig(options.endpoint)
         def region = AwsPluginUtil.parseConfig(options.region)
-        def pathStyle = AwsPluginUtil.parseConfig(options.pathStyle)
+        def recursiveString = AwsPluginUtil.parseConfig(options.recursive)
+        def prefix = AwsPluginUtil.parseConfig(options.prefix)
+
+        boolean recursive = false
+
+        if(recursiveString){
+            recursive = Boolean.valueOf(recursiveString)
+        }
+
         def format = "humanreadble" //hummanreable
 
         output.info("bucket: ${bucket}")
         output.info("accesskey: ${accessKey}")
         output.info("endpoint: ${endpoint}")
         output.info("region: ${region}")
-        output.info("pathStyle: ${pathStyle}")
 
-        AmazonS3 s3 = new AwsS3Builder().endpoint(endpoint)
+        S3Client s3 = new AwsS3Builder().endpoint(endpoint)
                                         .accessKey(accessKey)
                                         .secretKey(secretKey)
-                                        .region(region)
-                                        .pathStyle(pathStyle!=null?true:false).build()
+                                        .region(region).build()
 
 
         DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss")
 
         try{
-            ListObjectsV2Result result = s3.listObjectsV2(bucket)
-            List<S3ObjectSummary> objects = result.getObjectSummaries()
 
-            for (S3ObjectSummary os : objects) {
-                if(format == "json"){
-                    def data = [os.key, dateFormat.format(os.lastModified), os.size, os.owner.displayName, os.ETag, os.storageClass]
-                    output.println(data.toString())
-                }else{
-                    output.println("* " + os.owner + "\t" + dateFormat.format(os.lastModified) + "\t" + os.key)
-                }
+            ListObjectsV2Request.Builder requestBuilder = ListObjectsV2Request.builder().bucket(bucket)
 
+            if(!recursive){
+                requestBuilder.delimiter(S3Command.FILE_DELIMITER)
             }
+
+            if(prefix){
+                if (!prefix.endsWith(FILE_DELIMITER)) {
+                    prefix += FILE_DELIMITER;
+                }
+                requestBuilder.prefix(prefix)
+            }
+
+            ListObjectsV2Request request = requestBuilder.build()
+            ListObjectsV2Iterable response = s3.listObjectsV2Paginator(request)
+
+            long count =0
+            for (ListObjectsV2Response page : response) {
+                page.contents().forEach{ object ->
+
+                    Date lastModified = Date.from(object.lastModified)
+
+                    if(format == "json"){
+                        def data = [object.key, dateFormat.format(lastModified), object.size, object.owner.displayName, object.eTag(), object.storageClass]
+                        output.output(data.toString())
+                    }else{
+                        output.output("* ${count} " + object.owner + "\t" + dateFormat.format(lastModified) + "\t" + object.key)
+                    }
+
+                    count++
+                }
+            }
+
         }catch(Exception e){
             output.error(e.getMessage())
             System.exit(1)
         }
-
-        /*
-        ListObjectsV2Request req = new ListObjectsV2Request().withBucketName(bucket)
-
-        ListObjectsV2Result result = s3.listObjectsV2(req)
-
-        while (result.isTruncated()){
-            result = s3.listObjectsV2(req)
-            List<S3ObjectSummary> objects = result.getObjectSummaries()
-
-            for (S3ObjectSummary os : objects) {
-                if(format == "json"){
-                    def data = [os.key, dateFormat.format(os.lastModified), os.size, os.owner.displayName, os.ETag, os.storageClass]
-                    output.println(data.toString())
-                }else{
-                    output.println("* " + os.owner + "\t" + dateFormat.format(os.lastModified) + "\t" + os.key)
-                }
-            }
-
-            // If there are more than maxKeys keys in the bucket, get a continuation token
-            // and list the next objects.
-            String token = result.getNextContinuationToken();
-            output.info("Next Continuation Token: " + token);
-            req.setContinuationToken(token);
-
-            s3.download()
-        }
-
-         */
     }
 
     @Command(synonyms = "mb", description = "Create a bucket")
@@ -108,37 +111,47 @@ class S3Command {
         def secretKey = AwsPluginUtil.parseConfig(options.secretKey)
         def endpoint = AwsPluginUtil.parseConfig(options.endpoint)
         def region = AwsPluginUtil.parseConfig(options.region)
-        def pathStyle = AwsPluginUtil.parseConfig(options.pathStyle)
 
         output.info("bucket: ${bucket}")
         output.info("accesskey: ${accessKey}")
         output.info("endpoint: ${endpoint}")
         output.info("region: ${region}")
-        output.info("pathStyle: ${pathStyle}")
 
-        AmazonS3 s3 = new AwsS3Builder().endpoint(endpoint)
+        S3Client s3 = new AwsS3Builder().endpoint(endpoint)
                 .accessKey(accessKey)
                 .secretKey(secretKey)
-                .region(region)
-                .pathStyle(pathStyle!=null?true:false).build()
+                .region(region).build()
 
+        CreateBucketResponse response = null
 
-        Bucket b = null
-        if (s3.doesBucketExistV2(bucket)) {
-            output.warning("Bucket ${bucket} already exists")
-            System.exit(1);
+        Region regionAws
 
-        } else {
-            try {
-                b = s3.createBucket(bucket)
-            } catch (AmazonS3Exception e) {
-                output.error(e.getErrorMessage())
-                System.exit(1)
-
-            }
+        if(region){
+            regionAws = Region.of(region)
+        }else{
+            regionAws = Region.of(AwsS3Builder.DEFAULT_REGION)
         }
 
-        if(b){
+
+        CreateBucketRequest bucketBuild = CreateBucketRequest.builder()
+                                                            .bucket(bucket)
+                                                            .createBucketConfiguration(
+                                                                    CreateBucketConfiguration.builder()
+                                                                            .locationConstraint(regionAws.id())
+                                                                            .build())
+                                                            .build()
+
+
+        try {
+            response = s3.createBucket(bucketBuild);
+        } catch (Exception e) {
+            output.error(e.message)
+            System.exit(1)
+
+        }
+
+
+        if(response){
             output.warning("${bucket} was created");
         }
     }
@@ -150,7 +163,6 @@ class S3Command {
         def secretKey = AwsPluginUtil.parseConfig(options.secretKey)
         def endpoint = AwsPluginUtil.parseConfig(options.endpoint)
         def region = AwsPluginUtil.parseConfig(options.region)
-        def pathStyle = AwsPluginUtil.parseConfig(options.pathStyle)
         def forceStr = AwsPluginUtil.parseConfig(options.force)
 
         boolean force = false
@@ -162,67 +174,37 @@ class S3Command {
         output.info("accesskey: ${accessKey}")
         output.info("endpoint: ${endpoint}")
         output.info("region: ${region}")
-        output.info("pathStyle: ${pathStyle}")
 
-        AmazonS3 s3 = new AwsS3Builder().endpoint(endpoint)
+        S3Client s3 = new AwsS3Builder().endpoint(endpoint)
                 .accessKey(accessKey)
                 .secretKey(secretKey)
-                .region(region)
-                .pathStyle(pathStyle!=null?true:false).build()
+                .region(region).build()
+
 
         if(force){
-            try {
-                output.info(" - removing objects from bucket");
-                ObjectListing object_listing = s3.listObjects(bucket);
-                while (true) {
-                    for (Iterator<?> iterator =
-                            object_listing.getObjectSummaries().iterator();
-                         iterator.hasNext(); ) {
-                        S3ObjectSummary summary = (S3ObjectSummary) iterator.next();
-                        s3.deleteObject(bucket, summary.getKey());
-                    }
+            ListObjectsV2Request.Builder requestBuilder = ListObjectsV2Request.builder().bucket(bucket)
+            ListObjectsV2Request request = requestBuilder.build()
+            ListObjectsV2Iterable response = s3.listObjectsV2Paginator(request)
 
-                    // more object_listing to retrieve?
-                    if (object_listing.isTruncated()) {
-                        object_listing = s3.listNextBatchOfObjects(object_listing);
-                    } else {
-                        break;
-                    }
+            for (ListObjectsV2Response page : response) {
+                page.contents().forEach{ object ->
+                    def ops = new S3Ops(s3, bucket, object.key())
+                    ops.delete()
                 }
-
-                output.info(" - removing versions from bucket");
-                VersionListing version_listing = s3.listVersions(
-                        new ListVersionsRequest().withBucketName(bucket));
-                while (true) {
-                    for (Iterator<?> iterator =
-                            version_listing.getVersionSummaries().iterator();
-                         iterator.hasNext(); ) {
-                        S3VersionSummary vs = (S3VersionSummary) iterator.next();
-                        s3.deleteVersion(
-                                bucket, vs.getKey(), vs.getVersionId());
-                    }
-
-                    if (version_listing.isTruncated()) {
-                        version_listing = s3.listNextBatchOfVersions(
-                                version_listing);
-                    } else {
-                        break;
-                    }
-                }
-
-                output.info(" OK, bucket ready to delete!");
-            } catch (AmazonServiceException e) {
-                output.error(e.getErrorMessage());
-                System.exit(1);
             }
         }
 
         try {
-            s3.deleteBucket(bucket);
-        } catch (AmazonServiceException e) {
-            output.error(e.getErrorMessage());
-            System.exit(1);
+            DeleteBucketRequest deleteBucketRequest = DeleteBucketRequest.builder().bucket(bucket).build();
+            s3.deleteBucket(deleteBucketRequest)
+        } catch (Exception e) {
+            output.error(e.message)
+            System.exit(1)
+
         }
+
+        output.warning("${bucket} was deleted");
+
     }
 
     @Command(synonyms = "cp", description = "Copies a local file or S3 object to another location locally or in S3.")
@@ -232,29 +214,28 @@ class S3Command {
         def secretKey = AwsPluginUtil.parseConfig(options.secretKey)
         def endpoint = AwsPluginUtil.parseConfig(options.endpoint)
         def region = AwsPluginUtil.parseConfig(options.region)
-        def pathStyle = AwsPluginUtil.parseConfig(options.pathStyle)
 
         def source = AwsPluginUtil.parseConfig(options.source)
         def destination = AwsPluginUtil.parseConfig(options.destination)
 
         def recursiveStr = AwsPluginUtil.parseConfig(options.recursive)
-        def excludeStr = AwsPluginUtil.parseConfig(options.exclude)
-        def includeStr = AwsPluginUtil.parseConfig(options.include)
+
+        String exclude = AwsPluginUtil.parseConfig(options.exclude)
+        String include = AwsPluginUtil.parseConfig(options.include)
+
+        output.info("source: ${source}")
+        output.info("destination: ${destination}")
+        output.info("recursive: ${recursiveStr}")
+        output.info("exclude: ${exclude}")
+        output.info("include: ${include}")
+
+        output.info("endpoint: ${destination}")
+        output.info("accessKey: ${destination}")
 
         boolean recursive = false
-        boolean exclude = false
-        boolean include = false
 
         if (recursiveStr) {
             recursive = true
-        }
-
-        if (excludeStr) {
-            exclude = true
-        }
-
-        if (includeStr) {
-            include = true
         }
 
         URI sourceURI = source.toURI()
@@ -285,98 +266,435 @@ class S3Command {
             System.exit(1);
         }
 
-        AmazonS3 s3 = new AwsS3Builder().endpoint(endpoint)
+
+
+        S3Client s3 = new AwsS3Builder().endpoint(endpoint)
                 .accessKey(accessKey)
                 .secretKey(secretKey)
-                .region(region)
-                .pathStyle(pathStyle!=null?true:false).build()
+                .region(region).build()
 
+        if(sourceURI.scheme == "s3"){
+            boolean isFile = false
 
-        if(sourceURI.scheme == "s3" && destinationURI.scheme == "s3"){
-            //move objects from buckets
-        }
-
-        if(sourceURI.scheme == "s3" && destinationURI.scheme == "file"){
-            //destination from s3
             def bucket = sourceURI.host
-            def object = sourceURI.path
+            def key = AwsPluginUtil.getS3Key(sourceURI)
 
-            output.info("sourceURI: ${sourceURI.toString()}")
-            output.info("bucket: ${bucket}")
-            output.info("object: ${object}")
-            File file = new File(AwsPluginUtil.getFile(destinationURI))
 
-            if(AwsPluginUtil.isDirectory(destinationURI)){
-                if(!file.exists()){
-                    output.error("${file} folder doesn't exist")
-                    System.exit(1)
-                }
+            GetObjectRequest request = GetObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(key)
+                    .build()
 
-                if(recursive){
-                    //iterate
-                }else{
-                    //TODO: extract source file name
-                    output.info("downloading ${sourceURI} on ${destinationURI}")
-                }
-            }else{
-                output.info("parent path: ${file.parentFile}")
-                output.info("name path: ${file.name}")
-                if(!file.parentFile.exists()){
-                    output.error("${file.parentFile} folder doesn't exist")
-                    System.exit(1)
-                }
-
-                if(recursive){
-                    output.error("cannot export a folder on a file")
-                    System.exit(1)
-                }
-
-                output.info("downloading file ${sourceURI} on ${destinationURI}")
+            try{
+                def response = s3.getObject(request)
+                isFile = true
+            }catch(Exception){
+                isFile = false
             }
 
-
-            //TODO: validar si el path es un directorio
-            //si es un directorio se debe extaer el nombre del archivo
-            //si es recursivo, el destination path no puede ser un archivo, solo un directorio
-
-            //AwsPluginUtil.downloadObject(s3, output,bucket , object )
-        }
-
-        if(sourceURI.scheme == "file" && destinationURI.scheme == "s3"){
-
-            File file = new File(AwsPluginUtil.getFile(sourceURI))
-
-            if(AwsPluginUtil.isDirectory(sourceURI)){
-                if(!file.exists()){
-                    output.error("${file} folder doesn't exist")
-                    System.exit(1)
-                }
-                //iterate over the folder
-
-            }else{
-                if(!file.exists()){
-                    output.error("${file.parentFile} file doesn't exist")
-                    System.exit(1)
-                }
-
-                //destination from s3
-                def bucket = destinationURI.host
-                def object = destinationURI.path
-
-                if(object.startsWith("/")){
-                    object = object.replaceFirst("/","")
-                }
-
-                //TODO: check if the name must be set on s3 path
-                output.info("upload file ${sourceURI} on ${destinationURI}")
-
-                AwsPluginUtil.putObject(s3, output, bucket, object, file.absolutePath)
+            if(!isFile && destinationURI.scheme == "file" && !destinationURI.path.endsWith("/")){
+                output.error("when the source is a path, the destination must end with /")
+                System.exit(1)
             }
-
         }
 
 
+        FileOps sourceOps = new FileOpsBuilder().path(sourceURI)
+                                                .s3(s3).builder()
 
+        def listFiles = null
+
+        try{
+            listFiles = sourceOps.listFiles(recursive, include, exclude)
+        }catch(Exception e){
+            output.error(e.message);
+            System.exit(1);
+        }
+
+        if(!listFiles){
+            output.error("source files is empty")
+            System.exit(1)
+        }
+
+        List<FileTransferData> transfersFiles = []
+
+        listFiles.each {file->
+            if(sourceOps.exists(file)){
+                def transferData = new FileTransferData()
+                transferData.source = file
+                transferData.setDestinationValue(destinationURI)
+
+                transfersFiles << transferData
+            }
+        }
+
+        transfersFiles.each {transferFile->
+            this.processTransfer(transferFile, s3, output)
+        }
+
+    }
+
+    @Command(synonyms = "rm", description = "Remove objects from a bucket")
+    void remove(S3ListOptions options, CommandOutput output){
+        def bucket = AwsPluginUtil.parseConfig(options.bucket)
+        def accessKey = AwsPluginUtil.parseConfig(options.accessKey)
+        def secretKey = AwsPluginUtil.parseConfig(options.secretKey)
+        def endpoint = AwsPluginUtil.parseConfig(options.endpoint)
+        def region = AwsPluginUtil.parseConfig(options.region)
+        def recursiveString = AwsPluginUtil.parseConfig(options.recursive)
+        def prefix = AwsPluginUtil.parseConfig(options.prefix)
+
+        boolean recursive = false
+
+        if(recursiveString){
+            recursive = Boolean.valueOf(recursiveString)
+        }
+
+        output.info("bucket: ${bucket}")
+        output.info("accesskey: ${accessKey}")
+        output.info("endpoint: ${endpoint}")
+        output.info("region: ${region}")
+
+        S3Client s3 = new AwsS3Builder().endpoint(endpoint)
+                .accessKey(accessKey)
+                .secretKey(secretKey)
+                .region(region).build()
+
+        try{
+
+            ListObjectsV2Request.Builder requestBuilder = ListObjectsV2Request.builder().bucket(bucket)
+
+            if(!recursive){
+                requestBuilder.delimiter(S3Command.FILE_DELIMITER)
+            }
+
+            if(prefix){
+                if (!prefix.endsWith(FILE_DELIMITER)) {
+                    prefix += FILE_DELIMITER;
+                }
+                requestBuilder.prefix(prefix)
+            }
+
+            ListObjectsV2Request request = requestBuilder.build()
+            ListObjectsV2Iterable response = s3.listObjectsV2Paginator(request)
+
+            for (ListObjectsV2Response page : response) {
+                page.contents().forEach{ object ->
+                    output.output("Removing ${object.key()}")
+                    def ops = new S3Ops(s3, bucket, object.key())
+                    ops.delete()
+                }
+            }
+
+        }catch(Exception e){
+            output.error(e.getMessage())
+            System.exit(1)
+        }
+    }
+
+    def processTransfer(FileTransferData transferData, S3Client s3, CommandOutput output, boolean delete = false){
+        if(transferData.source.type == "s3" && transferData.destination.type == "s3"){
+
+            //source from s3
+            String bucketSource = transferData.source.bucket
+            String objectSource = transferData.source.key
+
+            String bucketDestination = transferData.destination.bucket
+            String objectDestination = transferData.destination.key
+
+            CopyObjectRequest copyObjRequest = new CopyObjectRequest(bucketSource, objectSource, bucketDestination, objectDestination)
+            s3.copyObject(copyObjRequest)
+
+            if(delete){
+                def ops = new S3Ops(s3, bucketSource, objectSource)
+                ops.delete()
+            }
+        }
+
+        if(transferData.source.type == "s3" && transferData.destination.type == "file"){
+
+            //source from s3
+            String bucket = transferData.source.bucket
+            String object = transferData.source.key
+
+            //TODO: create parent folder
+            AwsPluginUtil.downloadObject(s3, output, bucket, object, transferData.destination.path)
+
+            if(delete){
+                def ops = new S3Ops(s3, bucket, object)
+                ops.delete()
+            }
+
+        }
+
+        if(transferData.source.type == "file" && transferData.destination.type == "s3"){
+            //destination from s3
+            def bucket = transferData.destination.bucket
+            def object = transferData.destination.key
+
+            AwsPluginUtil.putObject(s3, output, bucket, object, transferData.source.path)
+
+            if(delete){
+                def ops = new FileSystemOps(new File(transferData.source.path))
+                ops.delete()
+            }
+        }
+
+    }
+
+    @Command(synonyms = "mv", description = "Copies a local file or S3 object to another location locally or in S3.")
+    void moveObjects(S3CopyOptions options, CommandOutput output) {
+
+        def accessKey = AwsPluginUtil.parseConfig(options.accessKey)
+        def secretKey = AwsPluginUtil.parseConfig(options.secretKey)
+        def endpoint = AwsPluginUtil.parseConfig(options.endpoint)
+        def region = AwsPluginUtil.parseConfig(options.region)
+
+        def source = AwsPluginUtil.parseConfig(options.source)
+        def destination = AwsPluginUtil.parseConfig(options.destination)
+
+        def recursiveStr = AwsPluginUtil.parseConfig(options.recursive)
+        def exclude = AwsPluginUtil.parseConfig(options.exclude)
+        def include = AwsPluginUtil.parseConfig(options.include)
+
+        output.info("source: ${source}")
+        output.info("destination: ${destination}")
+
+        boolean recursive = false
+
+        if (recursiveStr) {
+            recursive = true
+        }
+
+        URI sourceURI = source.toURI()
+        URI destinationURI = destination.toURI()
+
+        if(!sourceURI.scheme){
+            output.error("source parse URI failed");
+            System.exit(1);
+        }
+
+        if(!destinationURI.scheme){
+            output.error("destination parse URI failed");
+            System.exit(1);
+        }
+
+        if(sourceURI.scheme != "s3" && sourceURI.scheme != "file"){
+            output.error("source can just be s3:// or file://");
+            System.exit(1);
+        }
+
+        if(destinationURI.scheme != "s3" && destinationURI.scheme != "file"){
+            output.error("destination can just be s3:// or file://");
+            System.exit(1);
+        }
+
+        if(sourceURI.scheme == "file" && destinationURI.scheme == "file"){
+            output.error("source and destination cannot be file");
+            System.exit(1);
+        }
+
+
+
+        S3Client s3 = new AwsS3Builder().endpoint(endpoint)
+                .accessKey(accessKey)
+                .secretKey(secretKey)
+                .region(region).build()
+
+        if(sourceURI.scheme == "s3"){
+            boolean isFile = false
+
+            def bucket = sourceURI.host
+            def key = AwsPluginUtil.getS3Key(sourceURI)
+
+
+            GetObjectRequest request = GetObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(key)
+                    .build()
+
+            try{
+                def response = s3.getObject(request)
+                isFile = true
+            }catch(Exception){
+                isFile = false
+            }
+
+            if(!isFile && destinationURI.scheme == "file" && !destinationURI.path.endsWith("/")){
+                output.error("when the source is a path, the destination must end with /")
+                System.exit(1)
+            }
+        }
+
+
+        FileOps sourceOps = new FileOpsBuilder().path(sourceURI)
+                .s3(s3).builder()
+
+        def listFiles = null
+
+        try{
+            listFiles = sourceOps.listFiles(recursive, include, exclude)
+        }catch(Exception e){
+            output.error(e.message);
+            System.exit(1);
+        }
+
+        if(!listFiles){
+            output.error("source files is empty")
+            System.exit(1)
+        }
+
+        List<FileTransferData> transfersFiles = []
+
+        listFiles.each {file->
+            if(sourceOps.exists(file)){
+                def transferData = new FileTransferData()
+                transferData.source = file
+                transferData.setDestinationValue(destinationURI)
+
+                transfersFiles << transferData
+            }
+        }
+
+        transfersFiles.each {transferFile->
+            this.processTransfer(transferFile, s3, output, true)
+        }
+
+    }
+
+    @Command(synonyms = "sync", description = "Syncs  directories  and S3 prefixes.")
+    void syncObjects(S3SyncOptions options, CommandOutput output) {
+
+        def accessKey = AwsPluginUtil.parseConfig(options.accessKey)
+        def secretKey = AwsPluginUtil.parseConfig(options.secretKey)
+        def endpoint = AwsPluginUtil.parseConfig(options.endpoint)
+        def region = AwsPluginUtil.parseConfig(options.region)
+
+        def source = AwsPluginUtil.parseConfig(options.source)
+        def destination = AwsPluginUtil.parseConfig(options.destination)
+
+        def deleteStr = AwsPluginUtil.parseConfig(options.delete)
+        def exclude = AwsPluginUtil.parseConfig(options.exclude)
+        def include = AwsPluginUtil.parseConfig(options.include)
+
+        output.info("Sync folders:")
+        output.info("source: ${source}")
+        output.info("destination: ${destination}")
+        output.info("exclude: ${exclude}")
+        output.info("include: ${include}")
+        output.info("delete: ${deleteStr}")
+
+        boolean delete = false
+
+        if (deleteStr) {
+            delete = true
+        }
+
+        URI sourceURI = source.toURI()
+        URI destinationURI = destination.toURI()
+
+        if(!sourceURI.scheme){
+            output.error("source parse URI failed");
+            System.exit(1);
+        }
+
+        if(!destinationURI.scheme){
+            output.error("destination parse URI failed");
+            System.exit(1);
+        }
+
+        if(sourceURI.scheme != "s3" && sourceURI.scheme != "file"){
+            output.error("source can just be s3:// or file://");
+            System.exit(1);
+        }
+
+        if(destinationURI.scheme != "s3" && destinationURI.scheme != "file"){
+            output.error("destination can just be s3:// or file://");
+            System.exit(1);
+        }
+
+        if(sourceURI.scheme == "file" && destinationURI.scheme == "file"){
+            output.error("source and destination cannot be file");
+            System.exit(1);
+        }
+
+        S3Client s3 = new AwsS3Builder().endpoint(endpoint)
+                .accessKey(accessKey)
+                .secretKey(secretKey)
+                .region(region).build()
+
+        if(sourceURI.scheme == "s3"){
+            boolean isFile = false
+
+            def bucket = sourceURI.host
+            def key = AwsPluginUtil.getS3Key(sourceURI)
+
+
+            GetObjectRequest request = GetObjectRequest.builder()
+                    .bucket(bucket)
+                    .key(key)
+                    .build()
+
+            try{
+                def response = s3.getObject(request)
+                isFile = true
+            }catch(Exception){
+                isFile = false
+            }
+
+            if(!isFile && destinationURI.scheme == "file" && !destinationURI.path.endsWith("/")){
+                output.error("when the source is a path, the destination must end with /")
+                System.exit(1)
+            }
+        }
+
+
+        FileOps sourceOps = new FileOpsBuilder().path(sourceURI)
+                .s3(s3).builder()
+
+        FileOps destinationOps = new FileOpsBuilder().path(destinationURI)
+                .s3(s3).builder()
+
+        def listSourceFiles = null
+        def listDestinationFiles = null
+
+        try{
+            listSourceFiles = sourceOps.listFiles(true, include, exclude)
+        }catch(Exception e){
+            output.error(e.message);
+            System.exit(1);
+        }
+
+        try{
+            listDestinationFiles = destinationOps.listFiles(true, include, exclude)
+        }catch(Exception e){
+            output.error(e.message);
+            System.exit(1);
+        }
+
+        def newObjects = AwsPluginUtil.difference(listDestinationFiles, listSourceFiles)
+
+        newObjects.each { object->
+            def transferData = new FileTransferData()
+            transferData.source = object
+            transferData.setDestinationValue(destinationURI)
+
+            this.processTransfer(transferData, s3, output, false )
+        }
+
+        def oldObjects =  AwsPluginUtil.difference(listSourceFiles, listDestinationFiles)
+
+        if(delete){
+            oldObjects.each { object->
+                output.output("Removing ${object.name}")
+                FileOps fileOps = new FileOpsBuilder().path(object.getUri()).s3(s3).builder()
+                fileOps.delete()
+            }
+        }
+
+        if(newObjects.size()==0 && oldObjects.size()==0){
+            output.info("Not difference found")
+        }
     }
 
 

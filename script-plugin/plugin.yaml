@@ -19,13 +19,24 @@ providers:
       plugin-type: script
       script-interpreter: java -jar
       script-file: "@description@"
-      script-args: s3 list --bucket ${config.bucket} --accessKey ${config.accessKey} --secretKey ${config.secretKey} --region ${config.region} --endpoint ${config.endpoint} --pathStyle ${config.pathStyle}
+      script-args: s3 ls --bucket ${config.bucket} --prefix ${config.prefix} --recursive ${config.recursive}  --accessKey ${config.accessKey} --secretKey ${config.secretKey} --region ${config.region} --endpoint ${config.endpoint}
       config:
         - type: String
           name: bucket
           title: 'Bucket'
           description: 'S3 Bucket name'
           required: true
+        - type: String
+          name: prefix
+          title: 'Prefix'
+          description: 'Prefix'
+          required: false
+        - type: Boolean
+          name: recursive
+          title: 'Recursive'
+          description: 'Optional, Command is performed on all files or objects under the specified directory or prefix.'
+          required: false
+          default: false
         - type: String
           name: region
           title: 'Region'
@@ -38,14 +49,6 @@ providers:
           title: 'Endpoint'
           description: 'Optional, a custom S3 compatible endpoint to use, such as https://my-host.com/s3'
           required: false
-          renderingOptions:
-            groupName: Connection
-        - type: Boolean
-          name: pathStyle
-          title: 'pathStyle'
-          description: 'Optional, boolean, default=False, set to True if you need to define the bucket in your S3 like endpoint URL. e.g https://<s3_like_end_point_url>/<your_bucket_name>'
-          required: false
-          default: false
           renderingOptions:
             groupName: Connection
         - type: String
@@ -72,7 +75,7 @@ providers:
       plugin-type: script
       script-interpreter: java -jar
       script-file: "@description@"
-      script-args: s3 cp --source ${config.source} --destination ${config.destination} --recursive ${config.recursive} --exclude ${config.exclude} --include ${config.include} --accessKey ${config.accessKey} --secretKey ${config.secretKey} --region ${config.region} --endpoint ${config.endpoint} --pathStyle ${config.pathStyle}
+      script-args: s3 cp --source ${config.source} --destination ${config.destination} --recursive ${config.recursive} --exclude ${config.exclude} --include ${config.include} --accessKey ${config.accessKey} --secretKey ${config.secretKey} --region ${config.region} --endpoint ${config.endpoint}
       config:
         - type: String
           name: source
@@ -90,18 +93,16 @@ providers:
           description: 'Optional, Command is performed on all files or objects under the specified directory or prefix.'
           required: false
           default: false
-        - type: Boolean
+        - type: String
           name: exclude
           title: 'Exclude'
           description: 'Optional, Exclude all files or objects from the command that matches the specified pattern.'
           required: false
-          default: false
-        - type: Boolean
+        - type: String
           name: include
           title: 'Include'
           description: "Don't exclude files or objects in the command that match the specified pattern."
           required: false
-          default: false
         - type: String
           name: region
           title: 'Region'
@@ -114,14 +115,6 @@ providers:
           title: 'Endpoint'
           description: 'Optional, a custom S3 compatible endpoint to use, such as https://my-host.com/s3'
           required: false
-          renderingOptions:
-            groupName: Connection
-        - type: Boolean
-          name: pathStyle
-          title: 'pathStyle'
-          description: 'Optional, boolean, default=False, set to True if you need to define the bucket in your S3 like endpoint URL. e.g https://<s3_like_end_point_url>/<your_bucket_name>'
-          required: false
-          default: false
           renderingOptions:
             groupName: Connection
         - type: String
@@ -143,13 +136,13 @@ providers:
             storage-file-meta-filter: "Rundeck-data-type=password"
 
     - name: aws-s3-remote-mb
-      service: WorkflowStep
-      title: aws / s3 / mb
+      service: RemoteScriptNodeStep
+      title: aws / remote / s3 / mb
       description: Creates an S3 bucket.
       plugin-type: script
       script-interpreter: java -jar
       script-file: "@description@"
-      script-args: s3 mb --bucket ${config.bucket} --accessKey ${config.accessKey} --secretKey ${config.secretKey} --region ${config.region} --endpoint ${config.endpoint} --pathStyle ${config.pathStyle}
+      script-args: s3 mb --bucket ${config.bucket} --accessKey ${config.accessKey} --secretKey ${config.secretKey} --region ${config.region} --endpoint ${config.endpoint}
       config:
         - type: String
           name: bucket
@@ -170,14 +163,6 @@ providers:
           required: false
           renderingOptions:
             groupName: Connection
-        - type: Boolean
-          name: pathStyle
-          title: 'pathStyle'
-          description: 'Optional, boolean, default=False, set to True if you need to define the bucket in your S3 like endpoint URL. e.g https://<s3_like_end_point_url>/<your_bucket_name>'
-          required: false
-          default: false
-          renderingOptions:
-            groupName: Connection
         - type: String
           name: accessKey
           title: 'Access Key'
@@ -196,20 +181,26 @@ providers:
             storage-path-root: "keys"
             storage-file-meta-filter: "Rundeck-data-type=password"
 
-    - name: aws-s3-remote-rm
-      service: WorkflowStep
-      title: aws / s3 / rb
+    - name: aws-s3-remote-rb
+      service: RemoteScriptNodeStep
+      title: aws / remote/ s3 / rb
       description: Remove an S3 bucket.
       plugin-type: script
       script-interpreter: java -jar
       script-file: "@description@"
-      script-args: s3 rb --bucket ${config.bucket} --accessKey ${config.accessKey} --secretKey ${config.secretKey} --region ${config.region} --endpoint ${config.endpoint} --pathStyle ${config.pathStyle}
+      script-args: s3 rb --bucket ${config.bucket} --force ${config.force} --accessKey ${config.accessKey} --secretKey ${config.secretKey} --region ${config.region} --endpoint ${config.endpoint}
       config:
         - type: String
           name: bucket
           title: 'Bucket'
           description: 'S3 Bucket name'
           required: true
+        - type: Boolean
+          name: force
+          title: 'Force'
+          description: 'Force to delete objects if the bucket is not empty.'
+          required: false
+          default: false
         - type: String
           name: region
           title: 'Region'
@@ -224,12 +215,60 @@ providers:
           required: false
           renderingOptions:
             groupName: Connection
+        - type: String
+          name: accessKey
+          title: 'Access Key'
+          description: 'AWS Access Key'
+          required: true
+          renderingOptions:
+            groupName: Authentication
+        - type: String
+          name: secretKey
+          title: Secret Key
+          description: AWS Secret Key
+          renderingOptions:
+            groupName: Authentication
+            selectionAccessor: "STORAGE_PATH"
+            valueConversion: "STORAGE_PATH_AUTOMATIC_READ"
+            storage-path-root: "keys"
+            storage-file-meta-filter: "Rundeck-data-type=password"
+    - name: aws-s3-remote-rm
+      service: RemoteScriptNodeStep
+      title: aws/ remote / s3 / rm
+      description: Remove S3 objects and common prefixes under a prefix or all S3 buckets
+      plugin-type: script
+      script-interpreter: java -jar
+      script-file: "@description@"
+      script-args: s3 rm --bucket ${config.bucket} --prefix ${config.prefix} --recursive ${config.recursive} --accessKey ${config.accessKey} --secretKey ${config.secretKey} --region ${config.region} --endpoint ${config.endpoint}
+      config:
+        - type: String
+          name: bucket
+          title: 'Bucket'
+          description: 'S3 Bucket name'
+          required: true
+        - type: String
+          name: prefix
+          title: 'Prefix'
+          description: 'Prefix'
+          required: false
         - type: Boolean
-          name: pathStyle
-          title: 'pathStyle'
-          description: 'Optional, boolean, default=False, set to True if you need to define the bucket in your S3 like endpoint URL. e.g https://<s3_like_end_point_url>/<your_bucket_name>'
+          name: recursive
+          title: 'Recursive'
+          description: 'Optional, Command is performed on all files or objects under the specified directory or prefix.'
           required: false
           default: false
+        - type: String
+          name: region
+          title: 'Region'
+          description: 'AWS region name to use'
+          required: false
+          renderingOptions:
+            groupName: Connection
+        - type: String
+          name: endpoint
+          title: 'Endpoint'
+          description: 'Optional, a custom S3 compatible endpoint to use, such as https://my-host.com/s3'
+          required: false
           renderingOptions:
             groupName: Connection
         - type: String
@@ -250,4 +289,135 @@ providers:
             storage-path-root: "keys"
             storage-file-meta-filter: "Rundeck-data-type=password"
 
-
+    - name: aws-s3-remote-mv
+      service: RemoteScriptNodeStep
+      title: aws / remote / s3 / mv
+      description: Move a local file or S3 object to another location locally or in S3. <LocalPath> <S3Uri> or <S3Uri> <LocalPath> or <S3Uri> <S3Uri>
+      plugin-type: script
+      script-interpreter: java -jar
+      script-file: "@description@"
+      script-args: s3 mv --source ${config.source} --destination ${config.destination} --recursive ${config.recursive} --exclude ${config.exclude} --include ${config.include} --accessKey ${config.accessKey} --secretKey ${config.secretKey} --region ${config.region} --endpoint ${config.endpoint}
+      config:
+        - type: String
+          name: source
+          title: 'Source'
+          description: 'Source <LocalPath> or <S3Uri>'
+          required: true
+        - type: String
+          name: destination
+          title: 'Destination'
+          description: 'Destination <LocalPath> or <S3Uri>'
+          required: true
+        - type: Boolean
+          name: recursive
+          title: 'Recursive'
+          description: 'Optional, Command is performed on all files or objects under the specified directory or prefix.'
+          required: false
+          default: false
+        - type: String
+          name: exclude
+          title: 'Exclude'
+          description: 'Optional, Exclude all files or objects from the command that matches the specified pattern.'
+          required: false
+        - type: String
+          name: include
+          title: 'Include'
+          description: "Don't exclude files or objects in the command that match the specified pattern."
+          required: false
+        - type: String
+          name: region
+          title: 'Region'
+          description: 'AWS region name to use'
+          required: false
+          renderingOptions:
+            groupName: Connection
+        - type: String
+          name: endpoint
+          title: 'Endpoint'
+          description: 'Optional, a custom S3 compatible endpoint to use, such as https://my-host.com/s3'
+          required: false
+          renderingOptions:
+            groupName: Connection
+        - type: String
+          name: accessKey
+          title: 'Access Key'
+          description: 'AWS Access Key'
+          required: true
+          renderingOptions:
+            groupName: Authentication
+        - type: String
+          name: secretKey
+          title: Secret Key
+          description: AWS Secret Key
+          renderingOptions:
+            groupName: Authentication
+            selectionAccessor: "STORAGE_PATH"
+            valueConversion: "STORAGE_PATH_AUTOMATIC_READ"
+            storage-path-root: "keys"
+            storage-file-meta-filter: "Rundeck-data-type=password"
+    - name: aws-s3-remote-sync
+      service: RemoteScriptNodeStep
+      title: aws / remote / s3 / sync
+      description: Syncs  directories  and S3 prefixes. <LocalPath> <S3Uri> or <S3Uri> <LocalPath> or <S3Uri> <S3Uri>
+      plugin-type: script
+      script-interpreter: java -jar
+      script-file: "@description@"
+      script-args: s3 sync --source ${config.source} --destination ${config.destination} --delete ${config.delete} --exclude ${config.exclude} --include ${config.include} --accessKey ${config.accessKey} --secretKey ${config.secretKey} --region ${config.region} --endpoint ${config.endpoint}
+      config:
+        - type: String
+          name: source
+          title: 'Source'
+          description: 'Source <LocalPath> or <S3Uri>'
+          required: true
+        - type: String
+          name: destination
+          title: 'Destination'
+          description: 'Destination <LocalPath> or <S3Uri>'
+          required: true
+        - type: Boolean
+          name: delete
+          title: 'Delete'
+          description: 'Files that exist in the destination but not in the source are deleted during sync.'
+          required: false
+          default: false
+        - type: String
+          name: exclude
+          title: 'Exclude'
+          description: 'Optional, Exclude all files or objects from the command that matches the specified pattern.'
+          required: false
+        - type: String
+          name: include
+          title: 'Include'
+          description: "Don't exclude files or objects in the command that match the specified pattern."
+          required: false
+        - type: String
+          name: region
+          title: 'Region'
+          description: 'AWS region name to use'
+          required: false
+          renderingOptions:
+            groupName: Connection
+        - type: String
+          name: endpoint
+          title: 'Endpoint'
+          description: 'Optional, a custom S3 compatible endpoint to use, such as https://my-host.com/s3'
+          required: false
+          renderingOptions:
+            groupName: Connection
+        - type: String
+          name: accessKey
+          title: 'Access Key'
+          description: 'AWS Access Key'
+          required: true
+          renderingOptions:
+            groupName: Authentication
+        - type: String
+          name: secretKey
+          title: Secret Key
+          description: AWS Secret Key
+          renderingOptions:
+            groupName: Authentication
+            selectionAccessor: "STORAGE_PATH"
+            valueConversion: "STORAGE_PATH_AUTOMATIC_READ"
+            storage-path-root: "keys"
+            storage-file-meta-filter: "Rundeck-data-type=password"

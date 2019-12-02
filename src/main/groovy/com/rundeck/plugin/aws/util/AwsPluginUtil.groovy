@@ -1,10 +1,15 @@
 package com.rundeck.plugin.aws.util
 
-import com.amazonaws.AmazonServiceException
-import com.amazonaws.services.s3.AmazonS3
-import com.amazonaws.services.s3.model.S3Object
-import com.amazonaws.services.s3.model.S3ObjectInputStream
+
 import org.rundeck.toolbelt.CommandOutput
+import software.amazon.awssdk.core.sync.RequestBody
+import software.amazon.awssdk.core.sync.ResponseTransformer
+import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.model.GetObjectRequest
+import software.amazon.awssdk.services.s3.model.PutObjectRequest
+
+import java.nio.file.Path
+import java.nio.file.Paths
 
 class AwsPluginUtil {
 
@@ -19,42 +24,44 @@ class AwsPluginUtil {
         }
     }
 
-    def static downloadObject(AmazonS3 s3, CommandOutput output, String bucket_name, String key_name){
-        output.info("Downloading ${key_name} from S3 bucket ${bucket_name}")
+    def static downloadObject(S3Client s3, CommandOutput output, String bucket_name, String key_name, String file_path){
+        output.output("Downloading ${key_name} from S3 bucket ${bucket_name} to ${file_path}")
+
+        GetObjectRequest request = GetObjectRequest.builder()
+                .bucket(bucket_name)
+                .key(key_name)
+                .build()
+
         try {
-            S3Object o = s3.getObject(bucket_name, key_name)
-            S3ObjectInputStream s3is = o.getObjectContent()
-            FileOutputStream fos = new FileOutputStream(new File(key_name))
-            byte[] read_buf = new byte[1024]
-            int read_len = 0
-            while ((read_len = s3is.read(read_buf)) > 0) {
-                fos.write(read_buf, 0, read_len)
+
+            File file = new File(file_path)
+            if(file.exists()){
+                file.delete()
             }
-            s3is.close()
-            fos.close()
-        } catch (AmazonServiceException e) {
-            output.error(e.getErrorMessage())
-            System.exit(1)
-        } catch (FileNotFoundException e) {
-            output.error(e.getMessage())
-            System.exit(1)
-        } catch (IOException e) {
+            s3.getObject(request, ResponseTransformer.toFile(Paths.get(file_path)))
+
+        } catch (Exception e) {
             output.error(e.getMessage())
             System.exit(1)
         }
-        output.info("Done!")
-
     }
 
-    def static  putObject(AmazonS3 s3, CommandOutput output, String bucket_name, String key_name, String file_path){
-        output.info("Uploading ${key_name} to S3 bucket ${bucket_name}")
+    def static  putObject(S3Client s3, CommandOutput output, String bucket_name, String key_name, String file_path){
+        output.output("Uploading ${file_path}  to S3 bucket ${bucket_name}/${key_name}")
         try {
-            s3.putObject(bucket_name, key_name, new File(file_path));
-        } catch (AmazonServiceException e) {
-            output.error(e.getErrorMessage())
-            System.exit(1);
+
+
+            PutObjectRequest request = PutObjectRequest.builder()
+                                                       .bucket(bucket_name)
+                                                       .key(key_name)
+                                                       .build()
+
+            s3.putObject(request, RequestBody.fromFile(Paths.get(file_path)))
+
+        } catch (Exception e) {
+            output.warning(e.message)
+            System.exit(1)
         }
-        output.info("Done!")
     }
 
     static boolean isDirectory(URI uri){
@@ -74,5 +81,59 @@ class AwsPluginUtil {
     static String getFile(URI uri) {
         return uri.getQuery() == null ? uri.getPath() : uri.getPath() + "?" + uri.getQuery();
     }
+
+    static String getS3Key(URI uri){
+        def object = uri.path
+
+        if(object.startsWith("/")){
+            object = object.replaceFirst("/","")
+        }
+
+        return object
+    }
+
+    static getFileHash(File file){
+        Path.metaClass.getMd5 << { ->
+            def digest = java.security.MessageDigest.getInstance("MD5")
+            delegate.withInputStream { stream ->
+                stream.eachByte 4096, { buffer, length ->
+                    digest.update( buffer, 0, length )
+                }
+            }
+            digest.digest().encodeHex() as String
+        }
+
+        File.metaClass.getMd5 << { -> delegate.toPath().md5 }
+
+        file.md5
+
+    }
+
+
+    static <T> List<T> difference(Collection<T> list1, Collection<T> list2) {
+
+        if (list1.isEmpty()) {
+            if (list2.isEmpty()) {
+                return new ArrayList<T>();
+            }
+            return new ArrayList<T>(list2);
+        }
+
+        if (list2.isEmpty()) {
+            return new ArrayList<T>();
+        }
+
+        List<T> difference = new ArrayList<T>();
+
+        for (T object : list2) {
+            if (list1.contains(object) == false) {
+                difference.add(object);
+            }
+        }
+
+        return difference;
+
+    }
+
 
 }

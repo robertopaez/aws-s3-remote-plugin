@@ -1,21 +1,19 @@
 package com.rundeck.plugin.aws.util
 
-import com.amazonaws.auth.AWSStaticCredentialsProvider
-import com.amazonaws.auth.BasicAWSCredentials
-import com.amazonaws.client.builder.AwsClientBuilder
-import com.amazonaws.services.s3.AmazonS3
-import com.amazonaws.services.s3.AmazonS3ClientBuilder
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider
+import software.amazon.awssdk.regions.Region
+import software.amazon.awssdk.services.s3.S3Client
+import software.amazon.awssdk.services.s3.S3ClientBuilder
 
 class AwsS3Builder {
 
     final static String DEFAULT_REGION="us-west-1"
-    final static String DEFAULT_ENDPOINT="https://s3.amazonaws.com"
 
     String accessKey
     String secretKey
     String endpoint
     String region
-    Boolean pathStyle
 
     AwsS3Builder accessKey(String accessKey){
         this.accessKey=accessKey
@@ -34,33 +32,30 @@ class AwsS3Builder {
         this.region=region
         this
     }
-    AwsS3Builder pathStyle(Boolean pathStyle){
-        this.pathStyle=pathStyle
-        this
-    }
 
-    AmazonS3 build(){
-        AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard()
+    S3Client build(){
+
+        S3ClientBuilder builder = S3Client.builder()
+
 
         if(endpoint){
-            AwsClientBuilder.EndpointConfiguration endpointConfig = new AwsClientBuilder.EndpointConfiguration(endpoint!=null?endpoint:DEFAULT_ENDPOINT,
-                    region!=null?region:DEFAULT_REGION );
-            builder.withEndpointConfiguration(endpointConfig)
+            builder.endpointOverride(new URI(endpoint))
         }
 
-        if(!endpoint && region){
-            builder.withRegion(region)
+        if(region){
+            Region region = Region.of(this.region)
+            builder.region(region)
+        }else{
+            Region region = Region.of(DEFAULT_REGION)
+            builder.region(region)
         }
 
-        if(pathStyle){
-            builder.withPathStyleAccessEnabled(true)
-        }
+        builder.credentialsProvider(StaticCredentialsProvider.create(new AwsBasicCredentials(accessKey, secretKey)))
 
-        BasicAWSCredentials awsCreds = new BasicAWSCredentials(accessKey, secretKey)
-        builder.withCredentials(new AWSStaticCredentialsProvider(awsCreds))
-        AmazonS3 s3 = builder.build()
+        S3Client s3 = builder.build()
 
         return s3
     }
+
 
 }

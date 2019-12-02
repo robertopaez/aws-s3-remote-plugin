@@ -17,7 +17,4 @@ interface AWSConnectionBase {
     String getRegion();
 
 
-    @Option(description="Optional, boolean, default=False, set to True if you need to define the bucket in your S3 like endpoint URL. e.g https://<s3_like_end_point_url>/<your_bucket_name>", defaultToNull = true)
-    String getPathStyle();
-
 }
