@@ -13,5 +13,6 @@ interface S3ListOptions extends AWSConnectionBase{
     @Option(description="Prefix", defaultValue = "")
     String getPrefix();
 
-
+    @Option(description="format", defaultValue = "readable")
+    String getFormat();
 }

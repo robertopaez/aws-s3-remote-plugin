@@ -31,6 +31,7 @@ import java.text.SimpleDateFormat
 class S3Command {
 
     static String FILE_DELIMITER="/"
+    boolean debug = false
 
     @Command(synonyms = "ls", description = "List objects from a bucket")
     void list(S3ListOptions options, CommandOutput output){
@@ -41,14 +42,12 @@ class S3Command {
         def region = AwsPluginUtil.parseConfig(options.region)
         def recursiveString = AwsPluginUtil.parseConfig(options.recursive)
         def prefix = AwsPluginUtil.parseConfig(options.prefix)
-
+        def format = AwsPluginUtil.parseConfig(options.format)
         boolean recursive = false
 
         if(recursiveString){
             recursive = Boolean.valueOf(recursiveString)
         }
-
-        def format = "humanreadble" //hummanreable
 
         output.info("bucket: ${bucket}")
         output.info("accesskey: ${accessKey}")
@@ -90,12 +89,18 @@ class S3Command {
                     if(format == "json"){
                         def data = [object.key, dateFormat.format(lastModified), object.size, object.owner.displayName, object.eTag(), object.storageClass]
                         output.output(data.toString())
-                    }else{
+                    }else if(format == "readable"){
                         output.output("* ${count} " + object.owner + "\t" + dateFormat.format(lastModified) + "\t" + object.key)
+                    }else if(format == "key"){
+                        output.output("${object.key}")
                     }
 
                     count++
                 }
+            }
+
+            if(count==0){
+                output.warning("No keys found on $bucket")
             }
 
         }catch(Exception e){
@@ -166,7 +171,7 @@ class S3Command {
         def forceStr = AwsPluginUtil.parseConfig(options.force)
 
         boolean force = false
-        if(forceStr){
+        if(forceStr == "true"){
             force = true
         }
 
@@ -194,13 +199,10 @@ class S3Command {
             }
         }
 
-        try {
-            DeleteBucketRequest deleteBucketRequest = DeleteBucketRequest.builder().bucket(bucket).build();
+        try {DeleteBucketRequest deleteBucketRequest = DeleteBucketRequest.builder().bucket(bucket).build();
             s3.deleteBucket(deleteBucketRequest)
         } catch (Exception e) {
-            output.error(e.message)
-            System.exit(1)
-
+            handleError(e.message, output)
         }
 
         output.warning("${bucket} was deleted");
@@ -242,31 +244,24 @@ class S3Command {
         URI destinationURI = destination.toURI()
 
         if(!sourceURI.scheme){
-            output.error("source parse URI failed");
-            System.exit(1);
+            this.handleError("source parse URI failed", output)
         }
 
         if(!destinationURI.scheme){
-            output.error("destination parse URI failed");
-            System.exit(1);
+            this.handleError("destination parse URI failed", output)
         }
 
         if(sourceURI.scheme != "s3" && sourceURI.scheme != "file"){
-            output.error("source can just be s3:// or file://");
-            System.exit(1);
+            this.handleError("source can just be s3:// or file://", output)
         }
 
         if(destinationURI.scheme != "s3" && destinationURI.scheme != "file"){
-            output.error("destination can just be s3:// or file://");
-            System.exit(1);
+            this.handleError("destination can just be s3:// or file://", output)
         }
 
         if(sourceURI.scheme == "file" && destinationURI.scheme == "file"){
-            output.error("source and destination cannot be file");
-            System.exit(1);
+            this.handleError("source and destination cannot be file", output)
         }
-
-
 
         S3Client s3 = new AwsS3Builder().endpoint(endpoint)
                 .accessKey(accessKey)
@@ -293,8 +288,7 @@ class S3Command {
             }
 
             if(!isFile && destinationURI.scheme == "file" && !destinationURI.path.endsWith("/")){
-                output.error("when the source is a path, the destination must end with /")
-                System.exit(1)
+                this.handleError("when the source is a path, the destination must end with /", output)
             }
         }
 
@@ -307,13 +301,11 @@ class S3Command {
         try{
             listFiles = sourceOps.listFiles(recursive, include, exclude)
         }catch(Exception e){
-            output.error(e.message);
-            System.exit(1);
+            this.handleError(e.message, output)
         }
 
         if(!listFiles){
-            output.error("source files is empty")
-            System.exit(1)
+            this.handleError("source files is empty", output)
         }
 
         List<FileTransferData> transfersFiles = []
@@ -417,7 +409,6 @@ class S3Command {
             String bucket = transferData.source.bucket
             String object = transferData.source.key
 
-            //TODO: create parent folder
             AwsPluginUtil.downloadObject(s3, output, bucket, object, transferData.destination.path)
 
             if(delete){
@@ -470,31 +461,24 @@ class S3Command {
         URI destinationURI = destination.toURI()
 
         if(!sourceURI.scheme){
-            output.error("source parse URI failed");
-            System.exit(1);
+            this.handleError("source parse URI failed", output)
         }
 
         if(!destinationURI.scheme){
-            output.error("destination parse URI failed");
-            System.exit(1);
+            this.handleError("destination parse URI failed", output)
         }
 
         if(sourceURI.scheme != "s3" && sourceURI.scheme != "file"){
-            output.error("source can just be s3:// or file://");
-            System.exit(1);
+            this.handleError("source can just be s3:// or file://", output)
         }
 
         if(destinationURI.scheme != "s3" && destinationURI.scheme != "file"){
-            output.error("destination can just be s3:// or file://");
-            System.exit(1);
+            this.handleError("destination can just be s3:// or file://", output)
         }
 
         if(sourceURI.scheme == "file" && destinationURI.scheme == "file"){
-            output.error("source and destination cannot be file");
-            System.exit(1);
+            this.handleError("source and destination cannot be file", output)
         }
-
-
 
         S3Client s3 = new AwsS3Builder().endpoint(endpoint)
                 .accessKey(accessKey)
@@ -521,8 +505,7 @@ class S3Command {
             }
 
             if(!isFile && destinationURI.scheme == "file" && !destinationURI.path.endsWith("/")){
-                output.error("when the source is a path, the destination must end with /")
-                System.exit(1)
+                this.handleError("when the source is a path, the destination must end with /", output)
             }
         }
 
@@ -540,8 +523,7 @@ class S3Command {
         }
 
         if(!listFiles){
-            output.error("source files is empty")
-            System.exit(1)
+            this.handleError("source files is empty", output)
         }
 
         List<FileTransferData> transfersFiles = []
@@ -594,28 +576,23 @@ class S3Command {
         URI destinationURI = destination.toURI()
 
         if(!sourceURI.scheme){
-            output.error("source parse URI failed");
-            System.exit(1);
+            this.handleError("source parse URI failed", output)
         }
 
         if(!destinationURI.scheme){
-            output.error("destination parse URI failed");
-            System.exit(1);
+            this.handleError("destination parse URI failed", output)
         }
 
         if(sourceURI.scheme != "s3" && sourceURI.scheme != "file"){
-            output.error("source can just be s3:// or file://");
-            System.exit(1);
+            this.handleError("source can just be s3:// or file://", output)
         }
 
         if(destinationURI.scheme != "s3" && destinationURI.scheme != "file"){
-            output.error("destination can just be s3:// or file://");
-            System.exit(1);
+            this.handleError("destination can just be s3:// or file://", output)
         }
 
         if(sourceURI.scheme == "file" && destinationURI.scheme == "file"){
-            output.error("source and destination cannot be file");
-            System.exit(1);
+            this.handleError("source and destination cannot be file", output)
         }
 
         S3Client s3 = new AwsS3Builder().endpoint(endpoint)
@@ -643,8 +620,7 @@ class S3Command {
             }
 
             if(!isFile && destinationURI.scheme == "file" && !destinationURI.path.endsWith("/")){
-                output.error("when the source is a path, the destination must end with /")
-                System.exit(1)
+                this.handleError("when the source is a path, the destination must end with /", output)
             }
         }
 
@@ -661,8 +637,7 @@ class S3Command {
         try{
             listSourceFiles = sourceOps.listFiles(true, include, exclude)
         }catch(Exception e){
-            output.error(e.message);
-            System.exit(1);
+            this.handleError(e.message, output)
         }
 
         try{
@@ -698,5 +673,15 @@ class S3Command {
     }
 
 
+    def handleError(String message, CommandOutput output){
+        if(debug){
+            output.error(message)
+            throw new Exception(message)
+        }else{
+            output.error(message)
+            System.exit(1)
+        }
+
+    }
 
 }
