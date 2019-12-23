@@ -138,7 +138,7 @@ providers:
     - name: aws-s3-remote-mb
       service: RemoteScriptNodeStep
       title: aws / remote / s3 / mb
-      description: Creates an S3 bucket.
+      description: Creates a S3 bucket.
       plugin-type: script
       script-interpreter: java -jar
       script-file: "@description@"
@@ -184,7 +184,7 @@ providers:
     - name: aws-s3-remote-rb
       service: RemoteScriptNodeStep
       title: aws / remote/ s3 / rb
-      description: Remove an S3 bucket.
+      description: Remove a S3 bucket.
       plugin-type: script
       script-interpreter: java -jar
       script-file: "@description@"
