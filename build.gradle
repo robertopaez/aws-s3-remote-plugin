@@ -3,12 +3,29 @@ plugins {
     id 'java'
     id 'application'
     id 'com.github.johnrengelman.shadow' version '4.0.4'
+    id 'pl.allegro.tech.build.axion-release' version '1.7.0'
 
 }
 
-
 group 'com.rundeck.plugins'
-version '1.0.0-SNAPSHOT'
+scmVersion {
+    ignoreUncommittedChanges = true
+    tag {
+        prefix = ''
+        versionSeparator = ''
+        def origDeserialize=deserialize
+        //apend .0 to satisfy semver if the tag version is only X.Y
+        deserialize = { config, position, tagName ->
+            def orig = origDeserialize(config, position, tagName)
+            if (orig.split('\\.').length < 3) {
+                orig += ".0"
+            }
+            orig
+        }
+    }
+}
+version = scmVersion.version
+
 
 sourceCompatibility = 1.8
 
