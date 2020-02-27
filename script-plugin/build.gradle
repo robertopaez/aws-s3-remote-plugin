@@ -7,12 +7,12 @@ buildscript {
 
 version=scmVersion.version
 
-ext.pluginName = 'aws-s3-plugin'
-ext.pluginDescription = "aws-s3-plugin-"+ scmVersion.version+".jar"
+ext.pluginName = 'aws-s3-remote-plugin'
+ext.pluginDescription = "aws-s3-remote-plugin-"+ scmVersion.version+"-all.jar"
 ext.sopsCopyright = "© 2019, Variacode."
 ext.sopsUrl = "http://rundeck.com"
 ext.buildDateString=new Date().format("yyyy-MM-dd'T'HH:mm:ssX")
-ext.archivesBaseName = "aws-s3-plugin"
+ext.archivesBaseName = "aws-s3-remote-plugin"
 ext.pluginBaseFolder = "."
 ext.archiveFilename = ext.archivesBaseName + '-' + scmVersion.version
 

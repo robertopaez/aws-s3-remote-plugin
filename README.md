@@ -9,7 +9,7 @@ This plugin provides a series of workflow node steps that perform AWS S3 operati
 ## Install
 
 * run `gradle build`
-* copy `script-pluginn/libs/aws-s3-plugin-1.0.0-SNAPSHOT.zip` to rundeck `libext` dolder
+* copy `script-pluginn/libs/aws-s3-remote-plugin-1.0.0-SNAPSHOT.zip` to rundeck `libext` dolder
 
 ## Workflow Steps
 

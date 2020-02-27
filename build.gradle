@@ -54,12 +54,12 @@ shadowJar {
 }
 
 task copyArtifact(type: Copy) {
-    from file("$buildDir/libs/aws-s3-plugin-$version-all.jar")
+    from file("$buildDir/libs/aws-s3-remote-plugin-$version-all.jar")
     into file("script-plugin/contents")
 }
 
 task removeArtifact(type: Delete) {
-    delete("script-plugin/contents/aws-s3-plugin-$version-all.jar")
+    delete("script-plugin/contents/aws-s3-remote-plugin-$version-all.jar")
 }
 
 task plugin(type: GradleBuild) {
