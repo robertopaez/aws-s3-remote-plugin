@@ -291,6 +291,8 @@ class S3CommandTest extends Specification {
     def "test upload folder to bucket bad format"(){
         given:
 
+        createBucket("rundeck1")
+
         def copyOptions = Mock(S3CopyOptions){
             getSource()>>source
             getDestination()>>destination
@@ -311,6 +313,7 @@ class S3CommandTest extends Specification {
             errorMessage = e.message
         }
 
+        deleteBucket("rundeck1")
 
         then:
         1 * out.error(message)
@@ -318,19 +321,21 @@ class S3CommandTest extends Specification {
 
         where:
         source                  | destination               | error   | message
-        //"dsadsad"               | "dsadsadsa"               | true    | "source parse URI failed"
-        //"s3://dasdsad"          | "dsadsadsa"               | true    | "destination parse URI failed"
+        "dsadsad"               | "dsadsadsa"               | true    | "source parse URI failed"
+        "s3://dasdsad"          | "dsadsadsa"               | true    | "destination parse URI failed"
         "http://dasdsad"        | "s3://dasdsad"            | true    | "source can just be s3:// or file://"
         "s3://dasdsad"          | "http://dsadsadsa"        | true    | "destination can just be s3:// or file://"
         "file://dasdsad"        | "file://dsadsadsa"        | true    | "source and destination cannot be file"
         "s3://dasdsad"          | "http://dsadsadsa"        | true    | "destination can just be s3:// or file://"
-        "s3://rundeck"          | "file://dsadsadsa.txt"    | true    | "when the source is a path, the destination must end with /"
-        "s3://rundeck/test"     | "file://somepath/"        | true    | "source files is empty"
+        "s3://rundeck1"          | "file://dsadsadsa.txt"    | true    | "when the source is a path, the destination must end with /"
+        "s3://rundeck1/test"     | "file://somepath/"        | true    | "source files is empty"
 
     }
 
     def "test move folder to bucket bad format"(){
         given:
+
+        createBucket("rundeck2")
 
         def copyOptions = Mock(S3CopyOptions){
             getSource()>>source
@@ -352,21 +357,22 @@ class S3CommandTest extends Specification {
             errorMessage = e.message
         }
 
+        deleteBucket("rundeck2")
 
         then:
-        1 * out.error(message)
         errorMessage == message
+        1 * out.error(_)
 
         where:
         source                  | destination               | error   | message
-        //"dsadsad"               | "dsadsadsa"               | true    | "source parse URI failed"
-        //"s3://dasdsad"          | "dsadsadsa"               | true    | "destination parse URI failed"
+        "dsadsad"               | "dsadsadsa"               | true    | "source parse URI failed"
+        "s3://dasdsad"          | "dsadsadsa"               | true    | "destination parse URI failed"
         "http://dasdsad"        | "s3://dasdsad"            | true    | "source can just be s3:// or file://"
         "s3://dasdsad"          | "http://dsadsadsa"        | true    | "destination can just be s3:// or file://"
         "file://dasdsad"        | "file://dsadsadsa"        | true    | "source and destination cannot be file"
         "s3://dasdsad"          | "http://dsadsadsa"        | true    | "destination can just be s3:// or file://"
-        //"s3://rundeck"          | "file://dsadsadsa.txt"    | true    | "when the source is a path, the destination must end with /"
-        //"s3://rundeck/test"     | "file://somepath/"        | true    | "source files is empty"
+        "s3://rundeck2"          | "file://dsadsadsa.txt"    | true    | "when the source is a path, the destination must end with /"
+        "s3://rundeck2/test"     | "file://somepath/"        | true    | "source files is empty"
 
     }
 
@@ -474,6 +480,8 @@ class S3CommandTest extends Specification {
     def "test sync folder to bucket bad format"(){
         given:
 
+        createBucket("rundeck4")
+
         def copyOptions = Mock(S3SyncOptions){
             getSource()>>source
             getDestination()>>destination
@@ -494,6 +502,8 @@ class S3CommandTest extends Specification {
             errorMessage = e.message
         }
 
+        deleteBucket("rundeck4")
+
 
         then:
         1 * out.error(message)
@@ -501,13 +511,13 @@ class S3CommandTest extends Specification {
 
         where:
         source                  | destination               | error   | message
-        //"dsadsad"               | "dsadsadsa"               | true    | "source parse URI failed"
-        //"s3://dasdsad"          | "dsadsadsa"               | true    | "destination parse URI failed"
+        "dsadsad"               | "dsadsadsa"               | true    | "source parse URI failed"
+        "s3://dasdsad"          | "dsadsadsa"               | true    | "destination parse URI failed"
         "http://dasdsad"        | "s3://dasdsad"            | true    | "source can just be s3:// or file://"
         "s3://dasdsad"          | "http://dsadsadsa"        | true    | "destination can just be s3:// or file://"
         "file://dasdsad"        | "file://dsadsadsa"        | true    | "source and destination cannot be file"
         "s3://dasdsad"          | "http://dsadsadsa"        | true    | "destination can just be s3:// or file://"
-        "s3://rundeck"          | "file://dsadsadsa.txt"    | true    | "when the source is a path, the destination must end with /"
+        "s3://rundeck4"          | "file://dsadsadsa.txt"    | true    | "when the source is a path, the destination must end with /"
     }
 
     def "test move folder to bucket"(){
@@ -634,6 +644,65 @@ class S3CommandTest extends Specification {
         command.copyObjects(copyOptions,out )
 
         return [temp, temp1, temp3,temp4]
+    }
+
+    def createBucket(String bucket){
+        def options = Mock(S3ListOptions){
+            getBucket()>>bucket
+            getFormat()>>"key"
+            getAccessKey()>>accessKey
+            getSecretKey()>>secretKey
+            getEndpoint()>>minio.endpoint
+        }
+
+        def out = Mock(CommandOutput)
+        S3Command command = new S3Command()
+        command.createBucket(options, out)
+    }
+
+    def deleteBucket(String bucket){
+        def options = Mock(S3DeleteBucketOptions){
+            getBucket()>>bucket
+            getForce()>>"true"
+            getAccessKey()>>accessKey
+            getSecretKey()>>secretKey
+            getEndpoint()>>minio.endpoint
+        }
+
+        def out = Mock(CommandOutput)
+        S3Command command = new S3Command()
+        command.deleteBucket(options, out)
+    }
+
+    def loadFileToExistingBucket(String bucket, String key){
+        Path testDir = Files.createTempDirectory("copy-test")
+        def temp = File.createTempFile("test",".txt", testDir.toFile())
+        temp.text="This is a test"
+        temp.deleteOnExit()
+
+        def source = "file://${temp.getAbsolutePath()}"
+        def destination = "s3://${bucket}/${key}"
+
+        def options = Mock(S3ListOptions){
+            getBucket()>>bucket
+            getFormat()>>"key"
+            getAccessKey()>>accessKey
+            getSecretKey()>>secretKey
+            getEndpoint()>>minio.endpoint
+        }
+
+        def copyOptions = Mock(S3CopyOptions){
+            getSource()>>source
+            getDestination()>>destination
+            getRecursive()>>true
+            getAccessKey()>>accessKey
+            getSecretKey()>>secretKey
+            getEndpoint()>>minio.endpoint
+        }
+
+        def out = Mock(CommandOutput)
+        S3Command command = new S3Command()
+        command.copyObjects(copyOptions,out )
     }
 
 
