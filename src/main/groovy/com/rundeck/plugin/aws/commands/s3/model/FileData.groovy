@@ -44,6 +44,12 @@ class FileData  implements Comparable  {
         this.basePath = basePath
     }
 
+    FileData(String bucket, String key) {
+        this.bucket = bucket
+        this.type = "s3"
+        this.key = key
+    }
+
     FileData(URI uri) {
         this.type = uri.scheme
         if(this.type == "s3"){

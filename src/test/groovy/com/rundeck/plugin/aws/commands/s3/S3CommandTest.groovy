@@ -231,7 +231,7 @@ class S3CommandTest extends Specification {
         Path testDir = Files.createTempDirectory("copy-test2")
 
         def source = "s3://${bucket}"
-        def destination = "file://${testDir.toFile().getAbsolutePath()}/"
+        def destination = "${testDir.toFile().getAbsolutePath()}/"
 
        def copyOptions = Mock(S3CopyOptions){
             getSource()>>source
@@ -252,6 +252,39 @@ class S3CommandTest extends Specification {
 
         then:
         listResult.size() == listFiles.size()
+    }
+
+    def "test download single file from bucket"(){
+        given:
+        def bucket = "test2"
+
+        //load folder to bucket
+        def listFiles = copyFile(bucket)
+
+        Path testDir = Files.createTempDirectory("copy-test14")
+
+        def source = "s3://${bucket}/${listFiles.get(0).name}"
+        def destination = "${testDir.toFile().getAbsolutePath()}/test.txt"
+
+        def copyOptions = Mock(S3CopyOptions){
+            getSource()>>source
+            getDestination()>>destination
+            getRecursive()>>true
+            getAccessKey()>>accessKey
+            getSecretKey()>>secretKey
+            getEndpoint()>>minio.endpoint
+        }
+        def out = Mock(CommandOutput)
+
+        when:
+        S3Command command = new S3Command()
+
+        command.copyObjects(copyOptions,out )
+
+        def listResult = filesFromFolder(testDir)
+
+        then:
+        listResult.size() == 1
     }
 
 
@@ -285,8 +318,8 @@ class S3CommandTest extends Specification {
 
         where:
         source                  | destination               | error   | message
-        "dsadsad"               | "dsadsadsa"               | true    | "source parse URI failed"
-        "s3://dasdsad"          | "dsadsadsa"               | true    | "destination parse URI failed"
+        //"dsadsad"               | "dsadsadsa"               | true    | "source parse URI failed"
+        //"s3://dasdsad"          | "dsadsadsa"               | true    | "destination parse URI failed"
         "http://dasdsad"        | "s3://dasdsad"            | true    | "source can just be s3:// or file://"
         "s3://dasdsad"          | "http://dsadsadsa"        | true    | "destination can just be s3:// or file://"
         "file://dasdsad"        | "file://dsadsadsa"        | true    | "source and destination cannot be file"
@@ -326,14 +359,14 @@ class S3CommandTest extends Specification {
 
         where:
         source                  | destination               | error   | message
-        "dsadsad"               | "dsadsadsa"               | true    | "source parse URI failed"
-        "s3://dasdsad"          | "dsadsadsa"               | true    | "destination parse URI failed"
+        //"dsadsad"               | "dsadsadsa"               | true    | "source parse URI failed"
+        //"s3://dasdsad"          | "dsadsadsa"               | true    | "destination parse URI failed"
         "http://dasdsad"        | "s3://dasdsad"            | true    | "source can just be s3:// or file://"
         "s3://dasdsad"          | "http://dsadsadsa"        | true    | "destination can just be s3:// or file://"
         "file://dasdsad"        | "file://dsadsadsa"        | true    | "source and destination cannot be file"
         "s3://dasdsad"          | "http://dsadsadsa"        | true    | "destination can just be s3:// or file://"
-        "s3://rundeck"          | "file://dsadsadsa.txt"    | true    | "when the source is a path, the destination must end with /"
-        "s3://rundeck/test"     | "file://somepath/"        | true    | "source files is empty"
+        //"s3://rundeck"          | "file://dsadsadsa.txt"    | true    | "when the source is a path, the destination must end with /"
+        //"s3://rundeck/test"     | "file://somepath/"        | true    | "source files is empty"
 
     }
 
@@ -367,6 +400,38 @@ class S3CommandTest extends Specification {
 
         then:
         listResult.size() == listFiles.size()
+    }
+
+    def "test sync single file from bucket"(){
+        given:
+        def bucket = "testsync2"
+
+        //load folder to bucket
+        def listFiles = copyFile(bucket)
+
+        Path testDir = Files.createTempDirectory("copy-test2")
+
+        def source = "s3://${bucket}/${listFiles.get(0).name}"
+        def destination = "${testDir.toFile().getAbsolutePath()}/"
+
+        def copyOptions = Mock(S3SyncOptions){
+            getSource()>>source
+            getDestination()>>destination
+            getAccessKey()>>accessKey
+            getSecretKey()>>secretKey
+            getEndpoint()>>minio.endpoint
+        }
+        def out = Mock(CommandOutput)
+
+        when:
+        S3Command command = new S3Command()
+
+        command.syncObjects(copyOptions,out )
+
+        def listResult = filesFromFolder(testDir)
+
+        then:
+        listResult.size() == 1
     }
 
     def "test sync folder to bucket"(){
@@ -436,8 +501,8 @@ class S3CommandTest extends Specification {
 
         where:
         source                  | destination               | error   | message
-        "dsadsad"               | "dsadsadsa"               | true    | "source parse URI failed"
-        "s3://dasdsad"          | "dsadsadsa"               | true    | "destination parse URI failed"
+        //"dsadsad"               | "dsadsadsa"               | true    | "source parse URI failed"
+        //"s3://dasdsad"          | "dsadsadsa"               | true    | "destination parse URI failed"
         "http://dasdsad"        | "s3://dasdsad"            | true    | "source can just be s3:// or file://"
         "s3://dasdsad"          | "http://dsadsadsa"        | true    | "destination can just be s3:// or file://"
         "file://dasdsad"        | "file://dsadsadsa"        | true    | "source and destination cannot be file"
@@ -524,6 +589,7 @@ class S3CommandTest extends Specification {
     }
 
     def copyFile(String bucket){
+
         Path testDir = Files.createTempDirectory("copy-test")
         def temp = File.createTempFile("test",".txt", testDir.toFile())
         temp.text="This is a test"

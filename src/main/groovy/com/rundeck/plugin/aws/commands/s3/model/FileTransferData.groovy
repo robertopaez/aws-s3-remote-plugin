@@ -27,7 +27,7 @@ class FileTransferData {
                     throw new Exception("Parent folder ${file.parentFile.absolutePath} doesn't exists")
                 }
 
-                this.destination = new FileData(file, dir.absolutePath)
+                this.destination = new FileData(file, file.absolutePath)
             }
         }
 

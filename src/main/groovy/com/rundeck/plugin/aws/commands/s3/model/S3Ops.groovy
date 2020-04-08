@@ -18,10 +18,12 @@ class S3Ops implements FileOps {
     S3Client s3
     String bucket
     String key
+    Boolean isFile
 
-    S3Ops(URI path, S3Client s3) {
+    S3Ops(URI path, S3Client s3, Boolean isFile) {
         this.path = path
         this.s3 = s3
+        this.isFile = isFile
 
         this.bucket = path.host
         this.key = AwsPluginUtil.getS3Key(path)
@@ -42,7 +44,13 @@ class S3Ops implements FileOps {
     List<FileData> listFiles(boolean recursive, String include, String exclude) {
         def bucket = path.host
         def prefix = path.path
+
         List<FileData> list = []
+
+        if(isFile){
+            list << new FileData(bucket, prefix)
+            return list
+        }
 
         if(include=="false"){
             include = null

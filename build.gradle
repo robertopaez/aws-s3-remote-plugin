@@ -43,7 +43,7 @@ dependencies {
     compile 'com.github.rundeck.cli-toolbelt:toolbelt-jewelcli:0.2.4'
     compile 'org.slf4j:slf4j-nop:1.7.25'
 
-    compile group: 'software.amazon.awssdk', name: 's3', version: '2.10.25'
+    compile group: 'software.amazon.awssdk', name: 's3', version: '2.11.10'
 
     testCompile 'org.spockframework:spock-core:1.0-groovy-2.4'
     testCompile "org.testcontainers:testcontainers:1.12.1"
@@ -59,7 +59,9 @@ task copyArtifact(type: Copy) {
 }
 
 task removeArtifact(type: Delete) {
-    delete("script-plugin/contents/aws-s3-remote-plugin-$version-all.jar")
+    delete fileTree('script-plugin') {
+        include '**/*.jar'
+    }
 }
 
 task plugin(type: GradleBuild) {

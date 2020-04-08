@@ -135,5 +135,16 @@ class AwsPluginUtil {
 
     }
 
+    static URI parsePathToURI(String path, CommandOutput output){
+        File filePath = new File(path)
+        if(filePath!=null){
+            if(filePath.getParentFile().exists()){
+                return filePath.toURI()
+            }
+        }
+
+        return null
+    }
+
 
 }

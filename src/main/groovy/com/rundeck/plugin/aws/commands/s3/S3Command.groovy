@@ -231,9 +231,6 @@ class S3Command {
         output.info("exclude: ${exclude}")
         output.info("include: ${include}")
 
-        output.info("endpoint: ${destination}")
-        output.info("accessKey: ${destination}")
-
         boolean recursive = false
 
         if (recursiveStr) {
@@ -244,11 +241,18 @@ class S3Command {
         URI destinationURI = destination.toURI()
 
         if(!sourceURI.scheme){
-            this.handleError("source parse URI failed", output)
+            //check if source is a file
+            sourceURI = AwsPluginUtil.parsePathToURI(source, output)
+            if(!sourceURI){
+                this.handleError("source parse URI failed", output)
+            }
         }
 
         if(!destinationURI.scheme){
-            this.handleError("destination parse URI failed", output)
+            destinationURI = AwsPluginUtil.parsePathToURI(destination, output)
+            if(!destinationURI) {
+                this.handleError("destination parse URI failed", output)
+            }
         }
 
         if(sourceURI.scheme != "s3" && sourceURI.scheme != "file"){
@@ -268,12 +272,12 @@ class S3Command {
                 .secretKey(secretKey)
                 .region(region).build()
 
+        boolean isSourceFile = false
+
         if(sourceURI.scheme == "s3"){
-            boolean isFile = false
 
             def bucket = sourceURI.host
             def key = AwsPluginUtil.getS3Key(sourceURI)
-
 
             GetObjectRequest request = GetObjectRequest.builder()
                     .bucket(bucket)
@@ -282,19 +286,36 @@ class S3Command {
 
             try{
                 def response = s3.getObject(request)
-                isFile = true
-            }catch(Exception){
-                isFile = false
+                isSourceFile = true
+            }catch(Exception e){
+                //check if prefix exists
+                if(checkS3Prefix(s3, bucket,key)){
+                    isSourceFile = false
+                }else{
+                    //if not, return error that the key doesnt exists
+                    this.handleError(e.message, output)
+                }
             }
 
-            if(!isFile && destinationURI.scheme == "file" && !destinationURI.path.endsWith("/")){
+            if(!isSourceFile && destinationURI.scheme == "file" && !destinationURI.path.endsWith("/")){
                 this.handleError("when the source is a path, the destination must end with /", output)
+            }
+        }
+
+        if(sourceURI.scheme == "file"){
+            if(!AwsPluginUtil.isDirectory(sourceURI)){
+                File file = new File(AwsPluginUtil.getFile(sourceURI))
+                if(!file.exists()){
+                    this.handleError("Source File doesn't exists", output)
+                }
             }
         }
 
 
         FileOps sourceOps = new FileOpsBuilder().path(sourceURI)
-                                                .s3(s3).builder()
+                                                .s3(s3)
+                                                .isFile(isSourceFile)
+                                                .builder()
 
         def listFiles = null
 
@@ -461,11 +482,17 @@ class S3Command {
         URI destinationURI = destination.toURI()
 
         if(!sourceURI.scheme){
-            this.handleError("source parse URI failed", output)
+            sourceURI = AwsPluginUtil.parsePathToURI(source, output)
+            if(!sourceURI) {
+                this.handleError("source parse URI failed", output)
+            }
         }
 
         if(!destinationURI.scheme){
-            this.handleError("destination parse URI failed", output)
+            destinationURI = AwsPluginUtil.parsePathToURI(destination, output)
+            if(!destinationURI) {
+                this.handleError("destination parse URI failed", output)
+            }
         }
 
         if(sourceURI.scheme != "s3" && sourceURI.scheme != "file"){
@@ -485,8 +512,9 @@ class S3Command {
                 .secretKey(secretKey)
                 .region(region).build()
 
+        boolean isSourceFile = false
+
         if(sourceURI.scheme == "s3"){
-            boolean isFile = false
 
             def bucket = sourceURI.host
             def key = AwsPluginUtil.getS3Key(sourceURI)
@@ -499,9 +527,15 @@ class S3Command {
 
             try{
                 def response = s3.getObject(request)
-                isFile = true
-            }catch(Exception){
-                isFile = false
+                isSourceFile = true
+            }catch(Exception e){
+                //check if prefix exists
+                if(checkS3Prefix(s3,bucket,key)){
+                    isSourceFile = false
+                }else{
+                    //if not, return error that the key doesnt exists
+                    this.handleError(e.message, output)
+                }
             }
 
             if(!isFile && destinationURI.scheme == "file" && !destinationURI.path.endsWith("/")){
@@ -509,9 +543,20 @@ class S3Command {
             }
         }
 
+        if(sourceURI.scheme == "file"){
+            if(!AwsPluginUtil.isDirectory(sourceURI)){
+                File file = new File(AwsPluginUtil.getFile(sourceURI))
+
+                if(!file.exists()){
+                    this.handleError("Source File doesn't exists", output)
+                }
+            }
+        }
+
 
         FileOps sourceOps = new FileOpsBuilder().path(sourceURI)
-                .s3(s3).builder()
+                                                .isFile(isSourceFile)
+                                                .s3(s3).builder()
 
         def listFiles = null
 
@@ -576,11 +621,17 @@ class S3Command {
         URI destinationURI = destination.toURI()
 
         if(!sourceURI.scheme){
-            this.handleError("source parse URI failed", output)
+            sourceURI = AwsPluginUtil.parsePathToURI(source, output)
+            if(!sourceURI) {
+                this.handleError("source parse URI failed", output)
+            }
         }
 
         if(!destinationURI.scheme){
-            this.handleError("destination parse URI failed", output)
+            destinationURI = AwsPluginUtil.parsePathToURI(destination, output)
+            if(!destinationURI) {
+                this.handleError("destination parse URI failed", output)
+            }
         }
 
         if(sourceURI.scheme != "s3" && sourceURI.scheme != "file"){
@@ -600,8 +651,9 @@ class S3Command {
                 .secretKey(secretKey)
                 .region(region).build()
 
+        boolean isSourceFile = false
+
         if(sourceURI.scheme == "s3"){
-            boolean isFile = false
 
             def bucket = sourceURI.host
             def key = AwsPluginUtil.getS3Key(sourceURI)
@@ -614,19 +666,36 @@ class S3Command {
 
             try{
                 def response = s3.getObject(request)
-                isFile = true
-            }catch(Exception){
-                isFile = false
+                isSourceFile = true
+            }catch(Exception e){
+                //check if prefix exists
+                if(checkS3Prefix(s3, bucket,key)){
+                    isSourceFile = false
+                }else{
+                    //if not, return error that the key doesnt exists
+                    this.handleError(e.message, output)
+                }
             }
 
-            if(!isFile && destinationURI.scheme == "file" && !destinationURI.path.endsWith("/")){
+            if(!isSourceFile && destinationURI.scheme == "file" && !destinationURI.path.endsWith("/")){
                 this.handleError("when the source is a path, the destination must end with /", output)
+            }
+        }
+
+        if(sourceURI.scheme == "file"){
+            if(!AwsPluginUtil.isDirectory(sourceURI)){
+                File file = new File(AwsPluginUtil.getFile(sourceURI))
+
+                if(!file.exists()){
+                    this.handleError("Source File doesn't exists", output)
+                }
             }
         }
 
 
         FileOps sourceOps = new FileOpsBuilder().path(sourceURI)
-                .s3(s3).builder()
+                                                .isFile(isSourceFile)
+                                                .s3(s3).builder()
 
         FileOps destinationOps = new FileOpsBuilder().path(destinationURI)
                 .s3(s3).builder()
@@ -681,6 +750,20 @@ class S3Command {
             output.error(message)
             System.exit(1)
         }
+
+    }
+
+    def checkS3Prefix(S3Client s3, String bucket, String key){
+        ListObjectsV2Request.Builder requestBuilder = ListObjectsV2Request.builder().bucket(bucket)
+        requestBuilder.prefix(key)
+        ListObjectsV2Request request = requestBuilder.build()
+        ListObjectsV2Iterable response = s3.listObjectsV2Paginator(request)
+
+        if(response.size()>0){
+            return true
+        }
+
+        return false
 
     }
 
