@@ -538,7 +538,7 @@ class S3Command {
                 }
             }
 
-            if(!isFile && destinationURI.scheme == "file" && !destinationURI.path.endsWith("/")){
+            if(!isSourceFile && destinationURI.scheme == "file" && !destinationURI.path.endsWith("/")){
                 this.handleError("when the source is a path, the destination must end with /", output)
             }
         }
