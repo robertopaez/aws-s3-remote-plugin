@@ -48,7 +48,7 @@ class S3Ops implements FileOps {
         List<FileData> list = []
 
         if(isFile){
-            list << new FileData(bucket, prefix)
+            list << new FileData(bucket, prefix.replaceFirst("/",""))
             return list
         }
 
