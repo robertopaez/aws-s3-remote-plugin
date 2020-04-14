@@ -4,7 +4,7 @@ interface FileOps {
 
     URI getPath();
 
-    List<FileData> listFiles(boolean recursive, String include, String exclude);
+    List<FileData> listFiles(boolean recursive, String include, String exclude, boolean createFolder);
 
     boolean delete();
 

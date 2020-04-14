@@ -139,8 +139,8 @@ class AwsPluginUtil {
         try{
             File filePath = new File(path)
             if(filePath!=null){
-                if(filePath.getParentFile().exists()){
-                    return filePath.toURI()
+                if(filePath.exists() || filePath.getParentFile().exists()){
+                    return "file://${path}".toURI()
                 }
             }
         }catch(Exception e){

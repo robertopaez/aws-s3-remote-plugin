@@ -41,7 +41,7 @@ class S3Ops implements FileOps {
     }
 
     @Override
-    List<FileData> listFiles(boolean recursive, String include, String exclude) {
+    List<FileData> listFiles(boolean recursive, String include, String exclude, boolean createFolder) {
         def bucket = path.host
         def prefix = path.path
 

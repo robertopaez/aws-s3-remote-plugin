@@ -287,11 +287,58 @@ class S3CommandTest extends Specification {
         listResult.size() == 1
     }
 
+    def "test download single file from bucket, file doesnt exists"(){
+        given:
+        def bucket = "test33"
+
+        //load folder to bucket
+        def listFiles = copyFile(bucket)
+
+        Path testDir = Files.createTempDirectory("copy-test14")
+
+        def source = "s3://${bucket}/nofile.txt"
+        def destination = "${testDir.toFile().getAbsolutePath()}/test.txt"
+
+        def copyOptions = Mock(S3CopyOptions){
+            getSource()>>source
+            getDestination()>>destination
+            getRecursive()>>true
+            getAccessKey()>>accessKey
+            getSecretKey()>>secretKey
+            getEndpoint()>>minio.endpoint
+        }
+        def out = Mock(CommandOutput)
+
+        when:
+        S3Command command = new S3Command()
+        command.debug = true
+
+        String errorMessage = ""
+        try{
+            command.copyObjects(copyOptions,out )
+        }catch(Exception e){
+            errorMessage = e.message
+        }
+
+        then:
+        errorMessage !=null
+        errorMessage.contains("The specified key does not exist")
+    }
+
 
     def "test upload folder to bucket bad format"(){
         given:
 
         createBucket("rundeck1")
+
+        File parent = new File(System.getProperty("java.io.tmpdir"))
+        File temp = new File(parent, "test1")
+
+        if (temp.exists()) {
+            temp.delete()
+        }
+
+        temp.mkdir()
 
         def copyOptions = Mock(S3CopyOptions){
             getSource()>>source
@@ -327,15 +374,23 @@ class S3CommandTest extends Specification {
         "s3://dasdsad"          | "http://dsadsadsa"        | true    | "destination can just be s3:// or file://"
         "file://dasdsad"        | "file://dsadsadsa"        | true    | "source and destination cannot be file"
         "s3://dasdsad"          | "http://dsadsadsa"        | true    | "destination can just be s3:// or file://"
-        "s3://rundeck1"          | "file://dsadsadsa.txt"    | true    | "when the source is a path, the destination must end with /"
-        "s3://rundeck1/test"     | "file://somepath/"        | true    | "source files is empty"
 
     }
 
     def "test move folder to bucket bad format"(){
         given:
 
-        createBucket("rundeck2")
+        copyFile("rundeck2")
+
+        File parent = new File(System.getProperty("java.io.tmpdir"))
+        File temp = new File(parent, "test1")
+
+        if (temp.exists()) {
+            temp.delete()
+        }
+
+        temp.mkdir()
+
 
         def copyOptions = Mock(S3CopyOptions){
             getSource()>>source
@@ -361,19 +416,20 @@ class S3CommandTest extends Specification {
 
         then:
         errorMessage == message
-        1 * out.error(_)
+        error * out.error(_)
 
         where:
         source                  | destination               | error   | message
-        "dsadsad"               | "dsadsadsa"               | true    | "source parse URI failed"
-        "s3://dasdsad"          | "dsadsadsa"               | true    | "destination parse URI failed"
-        "http://dasdsad"        | "s3://dasdsad"            | true    | "source can just be s3:// or file://"
-        "s3://dasdsad"          | "http://dsadsadsa"        | true    | "destination can just be s3:// or file://"
-        "file://dasdsad"        | "file://dsadsadsa"        | true    | "source and destination cannot be file"
-        "s3://dasdsad"          | "http://dsadsadsa"        | true    | "destination can just be s3:// or file://"
-        "s3://rundeck2"          | "file://dsadsadsa.txt"    | true    | "when the source is a path, the destination must end with /"
-        "s3://rundeck2/test"     | "file://somepath/"        | true    | "source files is empty"
-
+        "dsadsad"               | "dsadsadsa"               | 1    | "source parse URI failed"
+        "s3://dasdsad"          | "dsadsadsa"               | 1    | "destination parse URI failed"
+        "http://dasdsad"        | "s3://dasdsad"            | 1    | "source can just be s3:// or file://"
+        "s3://dasdsad"          | "http://dsadsadsa"        | 1    | "destination can just be s3:// or file://"
+        "file://dasdsad"        | "file://dsadsadsa"        | 1    | "source and destination cannot be file"
+        "s3://dasdsad"          | "http://dsadsadsa"        | 1    | "destination can just be s3:// or file://"
+        "s3://rundeck2"          | "file://dsadsadsa.txt"    | 1    | "when the source is a path, the destination must end with /"
+        "s3://rundeck2/test"     | "file://somepath/"        | 1    | "source files is empty"
+        "s3://rundeck2"          | "${System.getProperty("java.io.tmpdir")}test1"           | 1    | "when the source is a path, the destination must end with /"
+        "s3://rundeck2"          | "${System.getProperty("java.io.tmpdir")}test1/"           | 0    | ""
     }
 
     def "test sync files from bucket"(){
@@ -386,7 +442,40 @@ class S3CommandTest extends Specification {
         Path testDir = Files.createTempDirectory("copy-test2")
 
         def source = "s3://${bucket}"
-        def destination = "file://${testDir.toFile().getAbsolutePath()}/"
+        def destination = "${testDir.toFile().getAbsolutePath()}/"
+
+        def copyOptions = Mock(S3SyncOptions){
+            getSource()>>source
+            getDestination()>>destination
+            getAccessKey()>>accessKey
+            getSecretKey()>>secretKey
+            getEndpoint()>>minio.endpoint
+        }
+        def out = Mock(CommandOutput)
+
+        when:
+        S3Command command = new S3Command()
+
+        command.syncObjects(copyOptions,out )
+
+        def listResult = filesFromFolder(testDir)
+
+        then:
+        listResult.size() == listFiles.size()
+    }
+
+    def "test sync files from bucket subpath"(){
+        given:
+        def bucket = "testsync2"
+        def subpath = "subpath"
+        //load folder to bucket
+        def listFiles = copyFile(bucket, subpath)
+
+        Path testDir = Files.createTempDirectory("copy-test-sync")
+
+        def source = "s3://${bucket}/${subpath}"
+
+        def destination = "${testDir.toFile().getAbsolutePath()}/"
 
         def copyOptions = Mock(S3SyncOptions){
             getSource()>>source
@@ -410,7 +499,7 @@ class S3CommandTest extends Specification {
 
     def "test sync single file from bucket"(){
         given:
-        def bucket = "testsync2"
+        def bucket = "testsync3"
 
         //load folder to bucket
         def listFiles = copyFile(bucket)
@@ -482,6 +571,16 @@ class S3CommandTest extends Specification {
 
         createBucket("rundeck4")
 
+        File parent = new File(System.getProperty("java.io.tmpdir"))
+        File temp = new File(parent, "test")
+
+        if (temp.exists()) {
+            temp.delete()
+        }
+
+        temp.mkdir()
+
+
         def copyOptions = Mock(S3SyncOptions){
             getSource()>>source
             getDestination()>>destination
@@ -506,18 +605,19 @@ class S3CommandTest extends Specification {
 
 
         then:
-        1 * out.error(message)
+        errorCalls * out.error(message)
         errorMessage == message
 
         where:
-        source                  | destination               | error   | message
-        "dsadsad"               | "dsadsadsa"               | true    | "source parse URI failed"
-        "s3://dasdsad"          | "dsadsadsa"               | true    | "destination parse URI failed"
-        "http://dasdsad"        | "s3://dasdsad"            | true    | "source can just be s3:// or file://"
-        "s3://dasdsad"          | "http://dsadsadsa"        | true    | "destination can just be s3:// or file://"
-        "file://dasdsad"        | "file://dsadsadsa"        | true    | "source and destination cannot be file"
-        "s3://dasdsad"          | "http://dsadsadsa"        | true    | "destination can just be s3:// or file://"
-        "s3://rundeck4"          | "file://dsadsadsa.txt"    | true    | "when the source is a path, the destination must end with /"
+        source                  | destination               | errorCalls   | message
+        "dsadsad"               | "dsadsadsa"               | 1    | "source parse URI failed"
+        "s3://dasdsad"          | "dsadsadsa"               | 1    | "destination parse URI failed"
+        "http://dasdsad"        | "s3://dasdsad"            | 1    | "source can just be s3:// or file://"
+        "s3://dasdsad"          | "http://dsadsadsa"        | 1    | "destination can just be s3:// or file://"
+        "file://dasdsad"        | "file://dsadsadsa"        | 1    | "source and destination cannot be file"
+        "s3://dasdsad"          | "http://dsadsadsa"        | 1    | "destination can just be s3:// or file://"
+
+
     }
 
     def "test move folder to bucket"(){
@@ -598,7 +698,7 @@ class S3CommandTest extends Specification {
 
     }
 
-    def copyFile(String bucket){
+    def copyFile(String bucket, String path = null){
 
         Path testDir = Files.createTempDirectory("copy-test")
         def temp = File.createTempFile("test",".txt", testDir.toFile())
@@ -621,6 +721,9 @@ class S3CommandTest extends Specification {
 
         def source = "file://${testDir.toFile().getAbsolutePath()}"
         def destination = "s3://${bucket}"
+        if(path!=null){
+            destination = "s3://${bucket}/${path}"
+        }
 
         def options = Mock(S3ListOptions){
             getBucket()>>bucket
@@ -714,4 +817,37 @@ class S3CommandTest extends Specification {
 
         return list
     }
+
+
+    /*
+    def "test download single file from bucket real"(){
+        given:
+
+        def source = "s3://rundecktmp/diagnostic-data/"
+        def destination = "/tmp/diagnostic-data/"
+
+        def copyOptions = Mock(S3SyncOptions){
+            getSource()>>source
+            getDestination()>>destination
+            getRecursive()>>false
+            getAccessKey()>>"AKIAJLM5CH7VMSIUXFOQ"
+            getSecretKey()>>"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"
+            getEndpoint()>>"https://s3.amazonaws.com"
+            getRegion()>> "us-east-1"
+            getDelegate()>>"false"
+        }
+        def out = Mock(CommandOutput)
+
+        when:
+        S3Command command = new S3Command()
+
+        command.syncObjects(copyOptions,out )
+
+        def listResult = filesFromFolder(Paths.get("/tmp"))
+
+        then:
+        listResult.size() == 1
+    }
+
+     */
 }

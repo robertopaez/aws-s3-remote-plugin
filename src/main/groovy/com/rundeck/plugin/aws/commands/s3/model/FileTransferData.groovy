@@ -15,7 +15,11 @@ class FileTransferData {
                     dir.parentFile.mkdirs()
                 }
 
-                File file = new File(dir.absolutePath + File.separator + source.key)
+                String path = dir.absolutePath + File.separator + source.key
+                if(source.basePath){
+                    path =   dir.absolutePath + File.separator +  source.key.replaceFirst(source.basePath, "")
+                }
+                File file = new File(path)
                 if(!file.parentFile.exists()){
                     file.parentFile.mkdirs()
                 }

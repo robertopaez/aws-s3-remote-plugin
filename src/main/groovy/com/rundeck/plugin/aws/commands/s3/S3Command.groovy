@@ -171,8 +171,8 @@ class S3Command {
         def forceStr = AwsPluginUtil.parseConfig(options.force)
 
         boolean force = false
-        if(forceStr == "true"){
-            force = true
+        if(forceStr){
+            force = Boolean.valueOf(forceStr)
         }
 
         output.info("bucket: ${bucket}")
@@ -320,7 +320,7 @@ class S3Command {
         def listFiles = null
 
         try{
-            listFiles = sourceOps.listFiles(recursive, include, exclude)
+            listFiles = sourceOps.listFiles(recursive, include, exclude, false)
         }catch(Exception e){
             this.handleError(e.message, output)
         }
@@ -429,6 +429,7 @@ class S3Command {
             //source from s3
             String bucket = transferData.source.bucket
             String object = transferData.source.key
+            String prefix = transferData.source.basePath
 
             AwsPluginUtil.downloadObject(s3, output, bucket, object, transferData.destination.path)
 
@@ -475,7 +476,7 @@ class S3Command {
         boolean recursive = false
 
         if (recursiveStr) {
-            recursive = true
+            recursive = Boolean.valueOf(recursiveStr)
         }
 
         URI sourceURI = source.toURI()
@@ -561,7 +562,7 @@ class S3Command {
         def listFiles = null
 
         try{
-            listFiles = sourceOps.listFiles(recursive, include, exclude)
+            listFiles = sourceOps.listFiles(recursive, include, exclude, false)
         }catch(Exception e){
             output.error(e.message);
             System.exit(1);
@@ -614,7 +615,7 @@ class S3Command {
         boolean delete = false
 
         if (deleteStr) {
-            delete = true
+            delete = Boolean.valueOf(deleteStr)
         }
 
         URI sourceURI = source.toURI()
@@ -704,13 +705,13 @@ class S3Command {
         def listDestinationFiles = null
 
         try{
-            listSourceFiles = sourceOps.listFiles(true, include, exclude)
+            listSourceFiles = sourceOps.listFiles(true, include, exclude, false)
         }catch(Exception e){
             this.handleError(e.message, output)
         }
 
         try{
-            listDestinationFiles = destinationOps.listFiles(true, include, exclude)
+            listDestinationFiles = destinationOps.listFiles(true, include, exclude, true)
         }catch(Exception e){
             output.error(e.message);
             System.exit(1);
@@ -755,11 +756,20 @@ class S3Command {
 
     def checkS3Prefix(S3Client s3, String bucket, String key){
         ListObjectsV2Request.Builder requestBuilder = ListObjectsV2Request.builder().bucket(bucket)
-        requestBuilder.prefix(key)
+        if(key){
+            requestBuilder.prefix(key)
+        }
         ListObjectsV2Request request = requestBuilder.build()
         ListObjectsV2Iterable response = s3.listObjectsV2Paginator(request)
 
-        if(response.size()>0){
+        def list = []
+        for (ListObjectsV2Response page : response) {
+            page.contents().forEach{ object ->
+                list.add(object.key())
+            }
+        }
+
+        if(list.size()>0){
             return true
         }
 

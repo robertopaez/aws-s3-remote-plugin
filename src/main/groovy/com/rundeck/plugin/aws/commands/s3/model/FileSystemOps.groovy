@@ -24,7 +24,7 @@ class FileSystemOps implements FileOps {
     }
 
     @Override
-    List<FileData> listFiles(boolean recursive, String include, String exclude) {
+    List<FileData> listFiles(boolean recursive, String include, String exclude, boolean createFolder) {
 
         if(include=="false"){
             include = null
@@ -39,7 +39,11 @@ class FileSystemOps implements FileOps {
         if(AwsPluginUtil.isDirectory(path)){
             File dir = new File(path)
             if(!dir.exists()){
-                throw new Exception("${dir.absolutePath} doesn't exists")
+                if(createFolder){
+                    dir.mkdirs()
+                }else{
+                    throw new Exception("${dir.absolutePath} doesn't exists")
+                }
             }
 
             Pattern excludePattern = exclude!=null?~/${exclude}/:null
