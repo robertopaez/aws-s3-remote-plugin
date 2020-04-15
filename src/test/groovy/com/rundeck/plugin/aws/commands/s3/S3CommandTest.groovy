@@ -817,37 +817,5 @@ class S3CommandTest extends Specification {
 
         return list
     }
-
-
-    /*
-    def "test download single file from bucket real"(){
-        given:
-
-        def source = "s3://rundecktmp/diagnostic-data/"
-        def destination = "/tmp/diagnostic-data/"
-
-        def copyOptions = Mock(S3SyncOptions){
-            getSource()>>source
-            getDestination()>>destination
-            getRecursive()>>false
-            getAccessKey()>>"AKIAJLM5CH7VMSIUXFOQ"
-            getSecretKey()>>"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"
-            getEndpoint()>>"https://s3.amazonaws.com"
-            getRegion()>> "us-east-1"
-            getDelegate()>>"false"
-        }
-        def out = Mock(CommandOutput)
-
-        when:
-        S3Command command = new S3Command()
-
-        command.syncObjects(copyOptions,out )
-
-        def listResult = filesFromFolder(Paths.get("/tmp"))
-
-        then:
-        listResult.size() == 1
-    }
-
-     */
+    
 }
